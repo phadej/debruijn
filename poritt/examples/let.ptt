@@ -1,0 +1,1 @@
+define id = let i : forall (A : U) -> A -> A = (\ _ x -> x) in i

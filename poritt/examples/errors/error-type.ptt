@@ -1,0 +1,2 @@
+define fix : forall (A : U) -> (A -> A) -> A
+           = \ A f -> f

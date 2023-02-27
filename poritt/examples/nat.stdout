@@ -1,0 +1,220 @@
+define NatC : U = {:succ :zero}
+defined NatC : U = {:succ :zero}
+define NatF
+  : NatC -> Desc
+  = \ c -> switch c (\ _ -> Desc) {:succ -> `X `1; :zero -> `1}
+defined NatF
+  : NatC -> Desc
+  = \ c -> switch c (\ _ -> Desc) {:succ -> `X `1; :zero -> `1}
+define NatD : Desc = `S NatC NatF
+defined NatD : Desc = `S NatC NatF
+define Nat : U = mu NatD
+defined Nat : U = mu NatD
+eval Nat
+  = mu (`S {:succ :zero} (\ c ->
+                            switch c (\ _ -> Desc)
+                              {:succ -> `X `1; :zero -> `1}))
+  : U
+define zero : Nat = con (:zero , :tt)
+defined zero : Nat = con (:zero , :tt)
+define succ : Nat -> Nat = \ n -> con (:succ , n , :tt)
+defined succ : Nat -> Nat = \ n -> con (:succ , n , :tt)
+define two = succ (succ zero)
+defined two : Nat = succ (succ zero)
+eval two = con (:succ , con (:succ , con (:zero , :tt) , :tt) , :tt) : Nat
+define three = succ two
+defined three : Nat = succ two
+eval three
+  = con (:succ , con (:succ , con (:succ , con (:zero , :tt) , :tt) , :tt) , :tt)
+  : Nat
+define sig : forall (A : U) (B : A -> U) -> U = \ A B -> exists (x : A) * B x
+defined sig : forall (A : U) -> (A -> U) -> U = \ A B -> exists (x : A) * B x
+define indSig
+  : forall
+      (A : U)
+      (B : A -> U)
+      (e : sig A B)
+      (M : sig A B -> U)
+      (m : forall (x : A) (y : B x) -> M (x , y)) ->
+      M e
+  = \ A B e M m -> m (e .fst) (e .snd)
+defined indSig
+  : forall
+      (A : U) (B : A -> U) (e : sig A B) (M : sig A B -> U) ->
+      (forall (x : A) (y : B x) -> M (x , y)) -> M e
+  = \ A B e M m -> m (e .fst) (e .snd)
+define indNat'
+  : forall
+      (M : Nat -> U)
+      (Mzero : M zero)
+      (Msucc : forall (n : Nat) -> M n -> M (succ n))
+      (e : Nat) ->
+      M e
+  = \ M Mzero Msucc e ->
+      ind
+        e
+        M
+        (\ d ->
+           indSig
+             NatC
+             (\ c -> evalDesc (NatF c) Nat)
+             d
+             (\ d' -> All (NatF (d' .fst)) Nat M (d' .snd) -> M (con d'))
+             (\ c ->
+                switch c (\ c' ->
+                            forall
+                              (y : evalDesc (NatF c') Nat) ->
+                              All (NatF c') Nat M y -> M (con (c' , y)))
+                  {:succ -> \ n ->
+                              switch (n .snd) (\ y ->
+                                                 All
+                                                   (NatF :succ)
+                                                   Nat
+                                                   M
+                                                   (n .fst , y) ->
+                                                 M (con (:succ , n .fst , y)))
+                                {:tt -> \ Mn -> Msucc (n .fst) (Mn .fst)};
+                  :zero -> \ tt ->
+                             switch tt (\ y ->
+                                          All (NatF :zero) Nat M y ->
+                                          M (con (:zero , y)))
+                               {:tt -> \ _ -> Mzero}}))
+defined indNat'
+  : forall
+      (M : Nat -> U) ->
+      M zero ->
+      (forall (n : Nat) -> M n -> M (succ n)) -> forall (e : Nat) -> M e
+  = \ M Mzero Msucc e ->
+      ind
+        e
+        M
+        (\ d ->
+           indSig
+             NatC
+             (\ c -> evalDesc (NatF c) Nat)
+             d
+             (\ d' -> All (NatF (d' .fst)) Nat M (d' .snd) -> M (con d'))
+             (\ c ->
+                switch c (\ c' ->
+                            forall
+                              (y : evalDesc (NatF c') Nat) ->
+                              All (NatF c') Nat M y -> M (con (c' , y)))
+                  {:succ -> \ n ->
+                              switch (n .snd) (\ y ->
+                                                 All
+                                                   (NatF :succ)
+                                                   Nat
+                                                   M
+                                                   (n .fst , y) ->
+                                                 M (con (:succ , n .fst , y)))
+                                {:tt -> \ Mn -> Msucc (n .fst) (Mn .fst)};
+                  :zero -> \ tt ->
+                             switch tt (\ y ->
+                                          All (NatF :zero) Nat M y ->
+                                          M (con (:zero , y)))
+                               {:tt -> \ _ -> Mzero}}))
+define indNat
+  : forall
+      (M : Nat -> U)
+      (Mzero : M zero)
+      (Msucc : forall (n : Nat) -> M n -> M (succ n))
+      (e : Nat) ->
+      M e
+  = \ M Mzero Msucc e ->
+      ind
+        e
+        M
+        (\ d ->
+           indSig
+             NatC
+             (\ c -> evalDesc (NatF c) Nat)
+             d
+             (\ d' -> All (NatF (d' .fst)) Nat M (d' .snd) -> M (con d'))
+             (\ c ->
+                switch c (\ c' ->
+                            forall
+                              (y : evalDesc (NatF c') Nat) ->
+                              All (NatF c') Nat M y -> M (con (c' , y)))
+                  {:succ -> \ n Mn -> Msucc (n .fst) (Mn .fst);
+                  :zero -> \ _ _ -> Mzero}))
+defined indNat
+  : forall
+      (M : Nat -> U) ->
+      M zero ->
+      (forall (n : Nat) -> M n -> M (succ n)) -> forall (e : Nat) -> M e
+  = \ M Mzero Msucc e ->
+      ind
+        e
+        M
+        (\ d ->
+           indSig
+             NatC
+             (\ c -> evalDesc (NatF c) Nat)
+             d
+             (\ d' -> All (NatF (d' .fst)) Nat M (d' .snd) -> M (con d'))
+             (\ c ->
+                switch c (\ c' ->
+                            forall
+                              (y : evalDesc (NatF c') Nat) ->
+                              All (NatF c') Nat M y -> M (con (c' , y)))
+                  {:succ -> \ n Mn -> Msucc (n .fst) (Mn .fst);
+                  :zero -> \ _ _ -> Mzero}))
+eval indNat
+  = \ M Mzero Msucc e ->
+      ind
+        e
+        M
+        (\ d ->
+           indSig
+             NatC
+             (\ c -> evalDesc (NatF c) Nat)
+             d
+             (\ d' -> All (NatF (d' .fst)) Nat M (d' .snd) -> M (con d'))
+             (\ c ->
+                switch c (\ c' ->
+                            forall
+                              (y : evalDesc (NatF c') Nat) ->
+                              All (NatF c') Nat M y -> M (con (c' , y)))
+                  {:succ -> \ n Mn -> Msucc (n .fst) (Mn .fst);
+                  :zero -> \ _ _ -> Mzero}))
+  : forall
+      (M : Nat -> U) ->
+      M zero ->
+      (forall (n : Nat) -> M n -> M (succ n)) -> forall (e : Nat) -> M e
+define iterNat
+  : forall (A : U) -> A -> (A -> A) -> Nat -> A
+  = \ A z s n -> indNat (\ _ -> A) z (\ _ n -> s n) n
+defined iterNat
+  : forall (A : U) -> A -> (A -> A) -> Nat -> A
+  = \ A z s n -> indNat (\ _ -> A) z (\ _ n0 -> s n0) n
+eval iterNat
+  = \ A z s n ->
+      ind
+        n
+        (\ _ -> A)
+        (\ d ->
+           indSig
+             NatC
+             (\ c -> evalDesc (NatF c) Nat)
+             d
+             (\ d' -> All (NatF (d' .fst)) Nat (\ _ -> A) (d' .snd) -> A)
+             (\ c ->
+                switch c (\ c' ->
+                            forall
+                              (y : evalDesc (NatF c') Nat) ->
+                              All (NatF c') Nat (\ _ -> A) y -> A)
+                  {:succ -> \ n0 Mn -> s (Mn .fst); :zero -> \ _ _ -> z}))
+  : forall (A : U) -> A -> (A -> A) -> Nat -> A
+define plus : Nat -> Nat -> Nat = \ n m -> iterNat Nat m succ n
+defined plus : Nat -> Nat -> Nat = \ n m -> iterNat Nat m succ n
+eval plus two two
+  = con (:succ , con (:succ , con (:succ , con (:succ , con (:zero , :tt) , :tt) , :tt) , :tt) , :tt)
+  : Nat
+define mult : Nat -> Nat -> Nat = \ n m -> iterNat Nat zero (plus m) n
+defined mult : Nat -> Nat -> Nat = \ n m -> iterNat Nat zero (plus m) n
+eval mult two three
+  = con (:succ , con (:succ , con (:succ , con (:succ , con (:succ , con (:succ , con (:zero , :tt) , :tt) , :tt) , :tt) , :tt) , :tt) , :tt)
+  : Nat
+eval mult three two
+  = con (:succ , con (:succ , con (:succ , con (:succ , con (:succ , con (:succ , con (:zero , :tt) , :tt) , :tt) , :tt) , :tt) , :tt) , :tt)
+  : Nat

@@ -1,0 +1,5 @@
+Error: examples/errors/error-lam-not-pi.ptt:1:17: Lambda abstraction should have function type
+  * actual: U
+  * When checking that \ x -> x has type U
+  * When infering type of (\ x -> x) : U
+ExitFailure

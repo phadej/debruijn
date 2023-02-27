@@ -1,0 +1,5 @@
+Place
+
+autocmd BufRead,BufNewFile *.ptt set filetype=poritt
+
+somewhere in your .vimrc

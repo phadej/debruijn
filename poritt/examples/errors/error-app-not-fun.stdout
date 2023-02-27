@@ -1,0 +1,4 @@
+Error: examples/errors/error-app-not-fun.ptt:1:5: Function application head does not have a pi-type
+  * actual: U
+  * When infering type of U U
+ExitFailure

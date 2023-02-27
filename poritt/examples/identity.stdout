@@ -1,0 +1,7 @@
+define id : forall (A : U) -> A -> A = \ _ x -> x
+defined id : forall (A : U) -> A -> A = \ _ x -> x
+type id
+  : forall (A : U) -> A -> A
+define const : forall (A : U) (B : U) -> A -> B -> A = \ _ _ x _ -> x
+defined const : forall (A : U) (B : U) -> A -> B -> A = \ _ _ x _ -> x
+eval const = \ _ _ x _ -> x : forall (A : U) (B : U) -> A -> B -> A

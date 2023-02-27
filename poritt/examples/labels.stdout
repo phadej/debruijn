@@ -1,0 +1,40 @@
+define Unit : U = {:tt}
+defined Unit : U = {:tt}
+define tt : Unit = :tt
+defined tt : Unit = :tt
+define elimUnit
+  : forall (M : Unit -> U) (Mtt : M tt) (x : Unit) -> M x
+  = \ M Mtt x -> switch x M {:tt -> Mtt}
+defined elimUnit
+  : forall (M : Unit -> U) -> M tt -> forall (x : Unit) -> M x
+  = \ M Mtt x -> switch x M {:tt -> Mtt}
+eval elimUnit (\ _ -> Unit) tt tt = :tt : Unit
+define Leibniz
+  : forall (A : U) (x : A) (y : A) -> U
+  = \ A x y -> forall (C : A -> U) -> C x -> C y
+defined Leibniz
+  : forall (A : U) -> A -> A -> U
+  = \ A x y -> forall (C : A -> U) -> C x -> C y
+type (\ _ _ Cx -> Cx) : forall (tt : Unit) -> Leibniz Unit tt :tt
+  : forall (tt0 : Unit) -> Leibniz Unit tt0 :tt
+define Bool : U = {:ff :tt}
+defined Bool : U = {:ff :tt}
+define true : Bool = :tt
+defined true : Bool = :tt
+define false : Bool = :ff
+defined false : Bool = :ff
+define if
+  : Bool -> forall (A : U) -> A -> A -> A
+  = \ b A t f -> switch b (\ _ -> A) {:ff -> f; :tt -> t}
+defined if
+  : Bool -> forall (A : U) -> A -> A -> A
+  = \ b A t f -> switch b (\ _ -> A) {:ff -> f; :tt -> t}
+define not : Bool -> Bool = \ b -> if b Bool false true
+defined not : Bool -> Bool = \ b -> if b Bool false true
+type (\ _ Cx -> Cx) : Leibniz Bool (not (not true)) true
+  : Leibniz Bool (not (not true)) true
+eval not (not true) = :tt : Bool
+define Void : U = {}
+defined Void : U = {}
+define absurd : Void -> forall (A : U) -> A = \ x A -> switch x (\ _ -> A) {}
+defined absurd : Void -> forall (A : U) -> A = \ x A -> switch x (\ _ -> A) {}

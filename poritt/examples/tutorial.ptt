@@ -1,0 +1,193 @@
+-- This is a line comment.
+
+-- There could be multiline comments, but there aren't now. Pori people are terse.
+
+-- If you have poritt in $PATH, you can run poritt scripts by typing
+--
+--   poritt tutorial.ptt
+--
+-- or if you are just looking around something like
+--
+--   cabal run exe:poritt -- poritt/examples/tutorial.ptt
+--
+-- works equally well.
+
+-- poritt script files consist from a sequence of statements:
+-- define, type, info and eval
+
+-- define defines a term.
+-- For example we can define a polymorpic identity function.
+
+define id : forall (A : U) -> A -> A
+          = \ _ x -> x
+
+-- As poritt doesn't elaborate raw syntax, we have to write types.
+-- However, because poritt uses bidirectional type-checking,
+-- we don't need to write too many of them
+-- Most annoying are type-arguments like in
+
+eval id (forall (B : U) -> B -> B) id
+
+-- we cannot just write `id _ id` like in e.g. Agda and hope for
+-- elaborator to fill the blanks.
+
+-- In fact, we can write `id _ id`, but poritt will complain
+-- that there is a hole (with type U), as it happens
+-- to know what type missing term should have.
+-- We get surprisingly a lot from just bidirectional typechecking.
+
+-- Let's go trough the features of the language.
+
+-- There is single universe U and we have U : U
+
+define typeInType : U = U
+
+-- that is "bad", but convenient.
+-- 
+-- We could add cumulative universe hiding it from the user like in Coq,
+-- but checking for consistency, but it isn't that interesting.
+
+-- As we have already seen that there are (dependent) function spaces.
+-- Don't forget to write forall!
+
+define somethingElse : (U : U) -> U = \ x -> x
+
+-- is different, t : T is a type-annotation!
+-- I don't think you can annotate arbitrary terms with types in Agda,
+-- but you can in poritt.
+-- That's why sometimes the identity function is given name `the`
+
+define the : forall (A : U) -> A -> A = \ _ x -> x
+
+-- Non-dependent function spaces can be written as A -> B,
+-- as you may have noticed.
+
+-- poritt also has dependent pairs, or sigma types.
+
+define Pointed : U = exists (A : U) * A
+
+-- And non-dependent pairs are written using an asterisk
+
+define Pair : U -> U -> U = \ A B -> A * B
+
+-- The fields can be accessed with field selectors.
+-- Selector is an identifier starting with a dot.
+-- first and second halves of pair are accessed with
+-- .fst and .snd.
+
+define fst : forall (A B : U) -> A * B -> A
+           = \ _ _ p -> p .fst
+
+-- selectors have a benefit of not requiring
+-- extra type arguments!
+
+-- poritt does eta-conversion for sigma types
+-- (and function and singletons we'll see soon)
+-- thus we can define induction principle
+-- for exists.
+
+define indExists
+  : forall (A : U)
+           (B : A -> U)
+           (e :  exists (x : A) * B x)
+           (M : (exists (x : A) * B x) -> U)  -- TODO: fix precedence in parser if possible
+           (m :  forall (x : A) (y : B x) -> M (x , y))
+        -> M e
+  = \ A B e M m -> m (e .fst) (e .snd)
+
+-- Next some less common type-theory features.
+-- poritt has finite sets (of labels).
+-- Using them we can define simple enumarations, like unit
+
+define Unit : U = {:tt}
+define tt : Unit = :tt
+
+-- or Booleans.
+
+define Bool : U = {:true :false}
+define true : Bool = :true
+define false : Bool = :false
+
+-- We can also switch-(case) on the labels of a finite set:
+-- to define a if-then-else:
+
+define ifte : Bool -> forall (A : U) -> A -> A -> A
+            = \ b A t f -> switch b (\ _ -> A)
+                             { :true  -> t
+                             ; :false -> f
+                             }
+
+-- Empty set is... empty.
+
+define Empty : U = {}
+
+define absurd : Empty -> forall (A : U) -> A
+              = \ x A -> switch x (\ _ -> A) {}
+
+-- Lastly poritt has descriptions and mu type.
+-- That allows us to define simple inductive types
+-- like natural numbers or lists.
+--
+-- Descriptions descrie the base functor of
+-- recursive type. There are three constructors:
+--
+-- * `1 : Desc                             unit
+-- * `X : Desc -> Desc                     argument
+-- * `S : (S : U) -> (S -> Desc) -> Desc   sigma
+--
+-- The descriptions are powerful enough
+-- to describe many types which fit SOS pattern
+-- i.e. Sigmas-of-Sigmas (c.f. Sums-of-Products).
+--
+-- However, the arguments have to appear directly.
+-- I.e. it's not possible to encode
+--
+--   data Tree a = Node a (List (Tree a))
+--
+-- as recursive occurence is wrapped in List.
+-- The underlying reason is that we cannot
+-- wrap occurences in arbitrary type constructors.
+--
+-- TODO: Add `H constructor to Desc.
+
+-- For example natural numbers look like:
+
+-- constructors:
+define NatC : U = {:zero :succ}
+
+-- constructor fields:
+define NatF : NatC -> Desc = \ c -> switch c (\ _ -> Desc)
+    { :zero -> `1
+    ; :succ -> `X `1
+    }
+
+-- description of natural numbers
+define NatD : Desc = `S NatC NatF
+
+-- Natural numbers is a least fixed point of NatD
+define Nat : U = mu NatD
+
+-- And natural number constructors look like:
+define zero : Nat        =        con (:zero , :tt)
+define succ : Nat -> Nat = \ n -> con (:succ , n , :tt)
+
+-- for the rest see nat.ptt, and for list examples see list.ptt
+-- It is worth mentioning that we can define *dependent*
+-- elimination for types defined this way,
+-- so this feature adds power in comparison to defining
+-- recursive types using Boehm-Berarducci encoding.
+
+-- Finally let us see the rest of statements.
+
+-- The eval statement we have already seen,
+-- it evaluates an expression
+eval succ (succ (succ zero))
+
+-- info prints information of previously defined symbol
+info succ
+
+-- and type prints the type of expression
+type succ (succ zero)
+
+-- These two would probably more useful in the REPL,
+-- if poritt had such.

@@ -1,0 +1,5 @@
+packages: debruijn
+packages: debruijn-safe
+
+-- demo package
+packages: poritt/

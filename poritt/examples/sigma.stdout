@@ -1,0 +1,36 @@
+define Pointed : U = exists (A : U) * A
+defined Pointed : U = exists (A : U) * A
+eval Pointed = exists (A : U) * A : U
+define point : forall (p : Pointed) -> p .fst = \ p -> p .snd
+defined point : forall (p : Pointed) -> p .fst = \ p -> p .snd
+define Unit : U = forall (A : U) -> A -> A
+defined Unit : U = forall (A : U) -> A -> A
+define tt : Unit = \ A x -> x
+defined tt : Unit = \ A x -> x
+define UnitPoint : Pointed = Unit , tt
+defined UnitPoint : Pointed = Unit , tt
+define Triple : U -> U -> U -> U = \ A B C -> A * B * C
+defined Triple : U -> U -> U -> U = \ A B C -> A * B * C
+eval tt , tt , tt : Triple Unit Unit Unit
+  = (\ A x -> x) , (\ A x -> x) , (\ A x -> x)
+  : Triple Unit Unit Unit
+eval UnitPoint .fst = forall (A : U) -> A -> A : U
+eval UnitPoint .snd = \ A x -> x : UnitPoint .fst
+eval point UnitPoint = \ A x -> x : UnitPoint .fst
+eval (tt , tt , tt : Triple Unit Unit Unit) .snd .snd = \ A x -> x : Unit
+define sig : forall (A : U) (B : A -> U) -> U = \ A B -> exists (x : A) * B x
+defined sig : forall (A : U) -> (A -> U) -> U = \ A B -> exists (x : A) * B x
+define indSigma
+  : forall
+      (A : U)
+      (B : A -> U)
+      (e : sig A B)
+      (M : sig A B -> U)
+      (m : forall (x : A) (y : B x) -> M (x , y)) ->
+      M e
+  = \ A B e M m -> m (e .fst) (e .snd)
+defined indSigma
+  : forall
+      (A : U) (B : A -> U) (e : sig A B) (M : sig A B -> U) ->
+      (forall (x : A) (y : B x) -> M (x , y)) -> M e
+  = \ A B e M m -> m (e .fst) (e .snd)

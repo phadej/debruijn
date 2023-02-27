@@ -1,0 +1,31 @@
+define Nat : U = forall (r : U) -> forall (s : r -> r) -> forall (z : r) -> r
+define zero : Nat = \ _ _ z -> z
+define succ : Nat -> Nat = \ n A s z -> n A s (s z)
+
+info Nat
+
+type succ (succ zero)
+
+define two = succ (succ zero)
+
+type two
+eval two
+
+define natInd : forall (A : U) -> (A -> A) -> A -> Nat -> A
+              = \ A s z n -> n A s z
+
+define plus : Nat -> Nat -> Nat
+            = \ n m -> natInd Nat succ m n
+
+eval plus two two
+
+define mult : Nat -> Nat -> Nat
+            = \ n m -> natInd Nat (plus m) zero n
+
+eval mult two (succ two)
+eval mult (succ two) two
+
+eval (\ n -> mult n (succ two)) : Nat -> Nat
+eval (\ n -> mult (succ two) n) : Nat -> Nat
+
+eval mult _

@@ -1,0 +1,235 @@
+define ListC : U = {:cons :nil}
+defined ListC : U = {:cons :nil}
+define ListF
+  : U -> ListC -> Desc
+  = \ A c -> switch c (\ _ -> Desc) {:cons -> `S A (\ _ -> `X `1); :nil -> `1}
+defined ListF
+  : U -> ListC -> Desc
+  = \ A c -> switch c (\ _ -> Desc) {:cons -> `S A (\ _ -> `X `1); :nil -> `1}
+define ListD : U -> Desc = \ A -> `S ListC (ListF A)
+defined ListD : U -> Desc = \ A -> `S ListC (ListF A)
+define List : U -> U = \ A -> mu (ListD A)
+defined List : U -> U = \ A -> mu (ListD A)
+define nil : forall (A : U) -> List A = \ _ -> con (:nil , :tt)
+defined nil : forall (A : U) -> List A = \ _ -> con (:nil , :tt)
+define cons
+  : forall (A : U) -> A -> List A -> List A
+  = \ _ x xs -> con (:cons , x , xs , :tt)
+defined cons
+  : forall (A : U) -> A -> List A -> List A
+  = \ _ x xs -> con (:cons , x , xs , :tt)
+macro $nil = con (:nil , :tt)
+macro $nil 
+  = con (:nil , :tt)
+macro $cons = con (:cons , x , xs , :tt)
+macro $cons x xs
+  = con (:cons , x , xs , :tt)
+define Bool : U = {:false :true}
+defined Bool : U = {:false :true}
+define and
+  : Bool -> Bool -> Bool
+  = \ x y -> switch x (\ _ -> Bool) {:false -> :false; :true -> y}
+defined and
+  : Bool -> Bool -> Bool
+  = \ x y -> switch x (\ _ -> Bool) {:false -> :false; :true -> y}
+define or
+  : Bool -> Bool -> Bool
+  = \ x y -> switch x (\ _ -> Bool) {:false -> y; :true -> :true}
+defined or
+  : Bool -> Bool -> Bool
+  = \ x y -> switch x (\ _ -> Bool) {:false -> y; :true -> :true}
+define ex
+  : List Bool
+  = cons
+      Bool
+      :true
+      (cons Bool :false (cons Bool :true (cons Bool :false (nil Bool))))
+defined ex
+  : List Bool
+  = cons
+      Bool
+      :true
+      (cons Bool :false (cons Bool :true (cons Bool :false (nil Bool))))
+eval ex
+  = con (:cons , :true , con (:cons , :false , con (:cons , :true , con (:cons , :false , con (:nil , :tt) , :tt) , :tt) , :tt) , :tt)
+  : List Bool
+define ex'
+  : List Bool
+  = $cons :true ($cons :false ($cons :true ($cons :false $nil)))
+defined ex'
+  : List Bool
+  = con (:cons , :true , con (:cons , :false , con (:cons , :true , con (:cons , :false , con (:nil , :tt) , :tt) , :tt) , :tt) , :tt)
+eval ex'
+  = con (:cons , :true , con (:cons , :false , con (:cons , :true , con (:cons , :false , con (:nil , :tt) , :tt) , :tt) , :tt) , :tt)
+  : List Bool
+define indSig
+  : forall
+      (A : U)
+      (B : A -> U)
+      (e : exists (x : A) * B x)
+      (M : exists (x : A) * B x -> U)
+      (m : forall (x : A) (y : B x) -> M (x , y)) ->
+      M e
+  = \ A B e M m -> m (e .fst) (e .snd)
+defined indSig
+  : forall
+      (A : U)
+      (B : A -> U)
+      (e : exists (x : A) * B x)
+      (M : exists (x : A) * B x -> U) ->
+      (forall (x : A) (y : B x) -> M (x , y)) -> M e
+  = \ A B e M m -> m (e .fst) (e .snd)
+define foldr
+  : forall (A : U) (B : U) -> (A -> B -> B) -> B -> List A -> B
+  = \ A B consC nilC e ->
+      ind
+        e
+        (\ _ -> B)
+        (\ d ->
+           indSig
+             ListC
+             (\ c -> evalDesc (ListF A c) (List A))
+             d
+             (\ d' -> All (ListD A) (mu (ListD A)) (\ _ -> B) d' -> B)
+             (\ c ->
+                switch c (\ c' ->
+                            forall
+                              (y : evalDesc (ListF A c') (List A)) ->
+                              All
+                                (ListD A)
+                                (mu (ListD A))
+                                (\ _ -> B)
+                                (c' , y) ->
+                              B)
+                  {:cons -> \ x acc -> consC (x .fst) (acc .fst);
+                  :nil -> \ _ _ -> nilC}))
+defined foldr
+  : forall (A : U) (B : U) -> (A -> B -> B) -> B -> List A -> B
+  = \ A B consC nilC e ->
+      ind
+        e
+        (\ _ -> B)
+        (\ d ->
+           indSig
+             ListC
+             (\ c -> evalDesc (ListF A c) (List A))
+             d
+             (\ d' -> All (ListD A) (mu (ListD A)) (\ _ -> B) d' -> B)
+             (\ c ->
+                switch c (\ c' ->
+                            forall
+                              (y : evalDesc (ListF A c') (List A)) ->
+                              All
+                                (ListD A)
+                                (mu (ListD A))
+                                (\ _ -> B)
+                                (c' , y) ->
+                              B)
+                  {:cons -> \ x acc -> consC (x .fst) (acc .fst);
+                  :nil -> \ _ _ -> nilC}))
+eval foldr Bool Bool and :true ex = :false : Bool
+eval foldr Bool Bool or :false ex = :true : Bool
+define indList
+  : forall
+      (A : U)
+      (e : List A)
+      (M : List A -> U)
+      (Mnil : M (nil A))
+      (Mcons : forall (x : A) (xs : List A) -> M xs -> M (cons A x xs)) ->
+      M e
+  = \ A e M Mnil Mcons ->
+      ind
+        e
+        M
+        (\ d ->
+           indSig
+             ListC
+             (\ c -> evalDesc (ListF A c) (List A))
+             d
+             (\ d' -> All (ListD A) (mu (ListD A)) M d' -> M (con d'))
+             (\ c ->
+                switch c (\ c' ->
+                            forall
+                              (y : evalDesc (ListF A c') (List A)) ->
+                              All (ListD A) (mu (ListD A)) M (c' , y) ->
+                              M (con (c' , y)))
+                  {:cons -> \ e' allE ->
+                              Mcons (e' .fst) (e' .snd .fst) (allE .fst);
+                  :nil -> \ e' allE -> Mnil}))
+defined indList
+  : forall
+      (A : U) (e : List A) (M : List A -> U) ->
+      M (nil A) ->
+      (forall (x : A) (xs : List A) -> M xs -> M (cons A x xs)) -> M e
+  = \ A e M Mnil Mcons ->
+      ind
+        e
+        M
+        (\ d ->
+           indSig
+             ListC
+             (\ c -> evalDesc (ListF A c) (List A))
+             d
+             (\ d' -> All (ListD A) (mu (ListD A)) M d' -> M (con d'))
+             (\ c ->
+                switch c (\ c' ->
+                            forall
+                              (y : evalDesc (ListF A c') (List A)) ->
+                              All (ListD A) (mu (ListD A)) M (c' , y) ->
+                              M (con (c' , y)))
+                  {:cons -> \ e' allE ->
+                              Mcons (e' .fst) (e' .snd .fst) (allE .fst);
+                  :nil -> \ e' allE -> Mnil}))
+define NP
+  : forall (k : U) (F : k -> U) (xs : List k) -> U
+  = \ k F -> foldr k U (\ x acc -> F x * acc) {:tt}
+defined NP
+  : forall (k : U) -> (k -> U) -> List k -> U
+  = \ k F -> foldr k U (\ x acc -> F x * acc) {:tt}
+define nilNP : forall (k : U) (F : k -> U) -> NP k F (nil k) = \ _ _ -> :tt
+defined nilNP : forall (k : U) (F : k -> U) -> NP k F (nil k) = \ _ _ -> :tt
+define consNP
+  : forall
+      (k : U) (F : k -> U) (x : k) (fx : F x) (xs : List k) (fxs : NP k F xs) ->
+      NP k F (cons k x xs)
+  = \ k F x fx xs fxs -> fx , fxs
+defined consNP
+  : forall
+      (k : U) (F : k -> U) (x : k) ->
+      F x -> forall (xs : List k) -> NP k F xs -> NP k F (cons k x xs)
+  = \ k F x fx xs fxs -> fx , fxs
+define curryFun
+  : forall (k : U) (F : k -> U) (As : List k) (B : U) -> U
+  = \ k F As B -> foldr k U (\ x y -> F x -> y) B As
+defined curryFun
+  : forall (k : U) -> (k -> U) -> List k -> U -> U
+  = \ k F As B -> foldr k U (\ x y -> F x -> y) B As
+eval curryFun U (\ x -> x) (cons U {:a :b :c} (cons U {:x :y :z} (nil U))) Bool
+  = {:a :b :c} -> {:x :y :z} -> {:false :true}
+  : U
+define curryNP
+  : forall
+      (K : U) (F : K -> U) (xs : List K) (B : U) (fromNP : NP K F xs -> B) ->
+      curryFun K F xs B
+  = \ K F xs B ->
+      indList
+        K
+        xs
+        (\ xs' -> (NP K F xs' -> B) -> curryFun K F xs' B)
+        (\ f -> f :tt)
+        (\ k ks Mks f x -> Mks (\ xs -> f (x , xs)))
+defined curryNP
+  : forall
+      (K : U) (F : K -> U) (xs : List K) (B : U) ->
+      (NP K F xs -> B) -> curryFun K F xs B
+  = \ K F xs B ->
+      indList
+        K
+        xs
+        (\ xs' -> (NP K F xs' -> B) -> curryFun K F xs' B)
+        (\ f -> f :tt)
+        (\ k ks Mks f x -> Mks (\ xs0 -> f (x , xs0)))
+eval curryNP U (\ x -> x) (cons U {:a :b :c} (cons U {:x :y :z} (nil U))) Bool
+  = \ f x x0 -> f (x , x0 , :tt)
+  : (NP U (\ x -> x) (cons U {:a :b :c} (cons U {:x :y :z} (nil U))) -> Bool) ->
+  curryFun U (\ x -> x) (cons U {:a :b :c} (cons U {:x :y :z} (nil U))) Bool

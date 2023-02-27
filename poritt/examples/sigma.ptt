@@ -1,0 +1,43 @@
+-- A type with a point.
+define Pointed : U = exists (A : U) * A
+
+eval Pointed
+
+define point : forall (p : Pointed) -> p .fst
+             = \ p -> p .snd
+
+define Unit : U = forall (A : U) -> A -> A
+define tt : Unit = \ A x -> x
+
+define UnitPoint : Pointed = Unit , tt
+
+-- * is right associative, as well as ,
+define Triple : U -> U -> U -> U = \ A B C -> A * B * C
+
+-- construction
+eval tt , tt , tt : Triple Unit Unit Unit
+
+-- selection
+eval UnitPoint .fst
+eval UnitPoint .snd
+eval point UnitPoint
+eval (tt , tt , tt : Triple Unit Unit Unit) .snd .snd
+
+-- Sigma type
+define sig : forall (A : U) (B : A -> U) -> U = \ A B -> exists (x : A) * B x
+
+-- Sigma induction
+--
+-- Without eta-expansion of sigma this fails with:
+--
+--  * expected: M e
+--  * actual: M (e .fst , e .snd)
+--
+define indSigma
+  : forall (A : U)
+           (B : A -> U)
+           (e : sig A B)
+           (M : sig A B -> U)
+           (m : forall (x : A) (y : B x) -> M (x , y))
+        -> M e
+  = \ A B e M m -> m (e .fst) (e .snd)

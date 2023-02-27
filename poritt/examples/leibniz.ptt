@@ -1,0 +1,11 @@
+define Id : forall (A : U) (x y : A) -> U
+          = \ A x y -> forall (C : A -> U) -> C x -> C y
+
+define refl : forall (A : U) (x : A) -> Id A x x
+            = \ A x C Cx -> Cx
+
+define sym : forall (A : U) (x y : A) -> Id A x y -> Id A y x
+           = \ A x y x=y -> x=y (\ z -> Id A z x) (refl A x)
+
+define trans : forall (A : U) (x y z : A) -> Id A x y -> Id A y z -> Id A x z
+             = \ A x y z x=y y=z -> y=z (\ v -> Id A x v) x=y

@@ -1,0 +1,161 @@
+cabal-version:      2.4
+name:               poritt
+version:            0.1
+license:            BSD-3-Clause
+license-file:       LICENSE
+category:           Development
+synopsis:           Pori Type Theory
+description:
+  A type theory implementation used as a demo project for @debruijn@ package.
+  .
+  The comparable theory is implemented in
+  Andras Kovacs' [elaboration-zoo](https://github.com/AndrasKovacs/elaboration-zoo)
+  as @02-typecheck-closures-debruijn@.
+  .
+  @poritt@ uses "glued" evaluation in the style of Olle Fredriksson's [sixty](https://github.com/ollef/sixty), which provides control
+  over unfolding of top-level definitions,
+  i.e. the unfolding is avoided as much as possible when unneccessary,
+  e.g. for error displaying.
+  .
+  @poritt@ is small, but not minimal, there are
+  .
+  * Sigma type, i.e. dependent pairs
+  .
+  * Finite sets of labels, which allow to define unit type, booleans, etc.
+  .
+  * Description of small universe of types, which allow to define
+  natural numbers, list, etc simple types (with dependent induction on them!).
+  Like in /the gentle art of levitation/ https://doi.org/10.1145/1863543.1863547, but without levitation.
+  .
+  See @examples/tutorial.mtt@ for a short introduction and tour of the features.
+
+author:             Oleg Grenrus <oleg.grenrus@iki.fi>
+maintainer:         Oleg Grenrus <oleg.grenrus@iki.fi>
+build-type:         Simple
+tested-with:        GHC ==9.2.7
+extra-source-files:
+  examples/*.ptt
+  examples/*.stdout
+
+source-repository head
+  type:     git
+  location: https://github.com/phadej/debruijn.git
+  subdir:   poritt
+
+common common
+  default-language:   Haskell2010
+  ghc-options:        -Wall -Wno-unticked-promoted-constructors
+  default-extensions:
+    BangPatterns
+    DataKinds
+    DeriveGeneric
+    DeriveTraversable
+    DerivingStrategies
+    EmptyCase
+    FlexibleContexts
+    FlexibleInstances
+    FunctionalDependencies
+    GADTs
+    GeneralizedNewtypeDeriving
+    KindSignatures
+    MultiWayIf
+    OverloadedRecordDot
+    OverloadedStrings
+    PatternSynonyms
+    QuantifiedConstraints
+    RankNTypes
+    RecordWildCards
+    RoleAnnotations
+    ScopedTypeVariables
+    StandaloneDeriving
+    StandaloneKindSignatures
+    TypeApplications
+    ViewPatterns
+
+flag debruijn
+  description: Use debruijn (@True@) or debruijn-safe (@False@)
+  manual:      True
+  default:     True
+
+library
+  import:          common
+  hs-source-dirs:  src
+
+  -- GHC-boot libraries
+  build-depends:
+    , base          ^>=4.16.3.0 || ^>=4.17.0.0 || ^>=4.18.0.0
+    , bytestring    ^>=0.11.3.1
+    , containers    ^>=0.6.5.1
+    , parsec        ^>=3.1.15.0
+    , text          ^>=1.2.5.0  || ^>=2.0
+    , transformers  ^>=0.5.6.2  || ^>=0.6.1.0
+
+  -- rest of the dependencies
+  build-depends:
+    , ansi-terminal        ^>=0.11.5
+    , indexed-traversable  ^>=0.1.2
+    , prettyprinter        ^>=1.7.1
+    , semialign            ^>=1.3
+    , text-short           ^>=0.1.5
+    , these                ^>=1.2
+
+  -- we use debruijn to keep variables in scope
+  if flag(debruijn)
+    build-depends: debruijn
+
+  else
+    build-depends: debruijn-safe
+
+  exposed-modules:
+    NanoTT
+    PoriTT.Base
+    PoriTT.Builtins
+    PoriTT.Conv
+    PoriTT.Elab
+    PoriTT.Eval
+    PoriTT.Global
+    PoriTT.Info
+    PoriTT.Lexer
+    PoriTT.Lint
+    PoriTT.Loc
+    PoriTT.Macro
+    PoriTT.Main
+    PoriTT.Name
+    PoriTT.Nice
+    PoriTT.Opts
+    PoriTT.Parser
+    PoriTT.PP
+    PoriTT.Quote
+    PoriTT.Raw
+    PoriTT.Rename
+    PoriTT.Simpl
+    PoriTT.Term
+    PoriTT.Used
+    PoriTT.Well
+
+executable poritt
+  import:         common
+  main-is:        poritt.hs
+  hs-source-dirs: exe
+  build-depends:
+    , base
+    , poritt
+
+test-suite poritt-tests
+  import:         common
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: tests
+  main-is:        poritt-tests.hs
+
+  -- library dependencies
+  build-depends:
+    , base
+    , poritt
+
+  -- test dependencies
+  build-depends:
+    , directory     ^>=1.3.6.2
+    , filepath      ^>=1.4.2.2
+    , tasty         ^>=1.4.3
+    , tasty-golden  ^>=2.3.5
+    , temporary     ^>=1.3

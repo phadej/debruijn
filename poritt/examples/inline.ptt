@@ -1,0 +1,6 @@
+-- identity function
+define id : forall (A : U) -> A -> A = \ _ x -> x
+
+inline id
+
+define id2 = id (forall (B : U) -> B -> B) id

@@ -1,0 +1,5 @@
+define Id : forall (A : U) (x y : A) -> U
+          = \ A x y -> forall (C : A -> U) -> C x -> C y
+
+--  a way to check values equal
+eval (\ _ Cx -> Cx) : Id {:x :y} :x :y

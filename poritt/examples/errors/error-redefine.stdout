@@ -1,0 +1,4 @@
+define id : forall (A : U) -> A -> A = \ _ x -> x
+defined id : forall (A : U) -> A -> A = \ _ x -> x
+Error: id is already defined
+ExitFailure

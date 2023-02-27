@@ -1,0 +1,9 @@
+-- identity function
+define id : forall (A : U) -> A -> A = \ _ x -> x
+
+type id
+
+-- constant function
+define const : forall (A B : U) -> A -> B -> A = \ _ _ x _ -> x
+
+eval const

@@ -1,0 +1,9 @@
+Error: examples/errors/error-type.ptt:2:22: Couldn't match types
+  * expected: A
+  * actual: A -> A
+  * not convertible: U |- A /= A -> A
+  * When checking that f has type A
+  * When checking that \ f -> f has type (A -> A) -> A
+  * When checking that \ A f -> f has type forall (A : U) -> (A -> A) -> A
+  * When infering type of (\ A f -> f) : forall (A : U) -> (A -> A) -> A
+ExitFailure

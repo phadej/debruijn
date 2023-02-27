@@ -1,0 +1,14 @@
+define Id : forall (A : U) (x y : A) -> U
+          = \ A x y -> forall (C : A -> U) -> C x -> C y
+
+define idtype = forall (A : U) -> A -> A
+define id : idtype = \ _ A -> A
+
+-- This is fine
+eval (\ _ Cx -> Cx) : Id idtype (id idtype id)  id
+
+--  This is not
+eval (\ _ _ Cx -> Cx) :
+  forall
+    (f : {:tt} -> idtype)
+  -> Id idtype (f :tt idtype (f :tt)) (f :tt)

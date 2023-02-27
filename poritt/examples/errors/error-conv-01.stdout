@@ -1,0 +1,15 @@
+define Id
+  : forall (A : U) (x : A) (y : A) -> U
+  = \ A x y -> forall (C : A -> U) -> C x -> C y
+defined Id
+  : forall (A : U) -> A -> A -> U
+  = \ A x y -> forall (C : A -> U) -> C x -> C y
+Error: examples/errors/error-conv-01.ptt:5:16: Couldn't match types
+  * expected: C :y
+  * actual: C :x
+  * label mismatch: :y /= :x
+  * When checking that Cx has type C :y
+  * When checking that \ Cx -> Cx has type C :x -> C :y
+  * When checking that \ _ Cx -> Cx has type Id {:x :y} :x :y
+  * When infering type of (\ _ Cx -> Cx) : Id {:x :y} :x :y
+ExitFailure

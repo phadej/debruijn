@@ -1,0 +1,2 @@
+define const : forall (A B : U) -> A -> B -> A
+             = \ _ _ x _ -> f y

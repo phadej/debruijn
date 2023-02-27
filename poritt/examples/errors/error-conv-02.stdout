@@ -1,0 +1,34 @@
+define Id
+  : forall (A : U) (x : A) (y : A) -> U
+  = \ A x y -> forall (C : A -> U) -> C x -> C y
+defined Id
+  : forall (A : U) -> A -> A -> U
+  = \ A x y -> forall (C : A -> U) -> C x -> C y
+define idtype = forall (A : U) -> A -> A
+defined idtype : U = forall (A : U) -> A -> A
+define id : idtype = \ _ A -> A
+defined id : idtype = \ _ A -> A
+eval (\ _ Cx -> Cx) : Id idtype (id idtype id) id
+  = \ _ Cx -> Cx
+  : Id idtype (id idtype id) id
+Error: examples/errors/error-conv-02.ptt:11:18: Couldn't match types
+  * expected: C (f :tt)
+  * actual: C (f :tt idtype (f :tt))
+  * spine length mismatch: 3 /= 5
+  * When checking that Cx has type C (f :tt)
+  * When checking that \ Cx -> Cx has type C (f :tt idtype (f :tt)) -> C (f :tt)
+  * When checking that \ _ Cx -> Cx has type Id
+                                               idtype
+                                               (f :tt idtype (f :tt))
+                                               (f :tt)
+  * When checking that \ _ _ Cx -> Cx has type forall
+                                                 (f : {:tt} -> idtype) ->
+                                                 Id
+                                                   idtype
+                                                   (f :tt idtype (f :tt))
+                                                   (f :tt)
+  * When infering type of (\ _ _ Cx -> Cx)
+                            : forall
+                                (f : {:tt} -> idtype) ->
+                                Id idtype (f :tt idtype (f :tt)) (f :tt)
+ExitFailure

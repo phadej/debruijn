@@ -1,0 +1,21 @@
+define Id
+  : forall (A : U) (x : A) (y : A) -> U
+  = \ A x y -> forall (C : A -> U) -> C x -> C y
+defined Id
+  : forall (A : U) -> A -> A -> U
+  = \ A x y -> forall (C : A -> U) -> C x -> C y
+type (\ _ _ Cx -> Cx) : forall (f : U -> U) -> Id (U -> U) f (\ x -> f x)
+  : forall (f : U -> U) -> Id (U -> U) f (\ x -> f x)
+type (\ _ _ Cx -> Cx) : forall (p : U * U) -> Id (U * U) p (p .fst , p .snd)
+  : forall (p : U * U) -> Id (U * U) p (p .fst , p .snd)
+type (\ _ _ Cx -> Cx) : forall (tt : {:tt}) -> Id {:tt} tt :tt
+  : forall (tt : {:tt}) -> Id {:tt} tt :tt
+type (\ _ _ _ Cx -> Cx) : forall (x : {:tt}) (y : {:tt}) -> Id {:tt} x y
+  : forall (x : {:tt}) (y : {:tt}) -> Id {:tt} x y
+type (\ _ _ _ Cx -> Cx)
+       : forall
+           (x : {:left} * {:right}) (y : {:left} * {:right}) ->
+           Id ({:left} * {:right}) x y
+  : forall
+      (x : {:left} * {:right}) (y : {:left} * {:right}) ->
+      Id ({:left} * {:right}) x y

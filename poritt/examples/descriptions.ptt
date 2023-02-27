@@ -1,0 +1,65 @@
+-- Constructors
+type Desc
+eval Desc
+
+type `1
+eval `1
+
+type `X `1
+eval `X `1
+
+type `S {:tt} \ _ -> `1
+eval `S {:tt} \ _ -> `1
+
+-- Induction on desriptions
+define indDescType = forall
+  (d : Desc)
+  (M : Desc -> U)
+  (case1 : M `1)
+  (caseS : forall (S : U) (D : S -> Desc) (MDs : forall (s : S) -> M (D s)) -> M (`S S D))
+  (caseX : forall (D : Desc) (MD : M D) -> M (`X D))
+  -> M d
+
+define indDescTerm : indDescType
+         = \ d M case1 caseS caseX -> indDesc d M case1 caseS caseX
+
+eval indDescTerm
+eval indDescTerm `1
+eval indDescTerm (`X `1)
+eval indDescTerm (`S {:tt} \ _ -> `X `1)
+
+-- identity function on descriptions
+-- checks that induction inducts.
+define idDesc : Desc -> Desc
+            = \ d -> indDesc d (\ _ -> Desc)
+              `1
+              (\ S D _ -> `S S D)
+              (\ D _   -> `X D)
+
+eval idDesc `1
+eval idDesc (`X `1)
+eval idDesc (`S {:tt} \ _ -> `X `1)
+
+info evalDesc
+
+define evalDesc' : Desc -> U -> U = \ d X -> indDesc d (\ _ -> U)
+  {:tt}
+  (\ S D F -> exists (s : S) * F s)
+  (\ D F   -> X * F)
+
+eval evalDesc' (`S {:zz} \ _ -> `X `1)
+eval evalDesc (`S {:zz} \ _ -> `X `1)
+
+info All
+define All' : forall (D : Desc) (X : U) (P : X -> U) (xs : evalDesc D X) -> U
+            = \ D' X P -> indDesc D'  (\ D -> forall (xs : evalDesc D X) -> U)
+               (\ xs -> {:tt})
+               (\ S D Dm xs -> Dm (xs .fst) (xs .snd))
+               (\   D Dm xs -> P (xs .fst) * Dm (xs .snd))
+
+info all
+define all' : forall (D : Desc) (X : U) (P : X -> U) (p : forall (x : X) -> P x) (xs : evalDesc D X) -> All D X P xs
+            = \ D' X P p -> indDesc D'                            (\ D -> forall (xs : evalDesc D X) -> All D X P xs)
+                (\          xs -> :tt )
+                (\ S D allD xs -> allD (xs .fst) (xs .snd))
+                (\   D allD xs -> p (xs .fst) , allD (xs .snd))

@@ -1,0 +1,40 @@
+-- Finite sets of labels
+
+-- Any singleton set can act as unit type
+define Unit : U = {:tt}
+define tt : Unit = :tt
+
+-- And we can write dependent elimination,
+-- which isn't possible with Church version (forall (A : U) -> A -> A).
+define elimUnit
+	: forall (M : Unit -> U) (Mtt : M tt) (x : Unit) -> M x
+	= \ M Mtt x -> switch x M { :tt -> Mtt }
+
+eval elimUnit (\ _ -> Unit) tt tt
+
+-- ... although we have eta-expansion of singleton finite sets
+define Leibniz : forall (A : U) (x y : A) -> U = \ A x y -> forall (C : A -> U) -> C x -> C y
+type (\ _ _ Cx -> Cx) : forall (tt : Unit) -> Leibniz Unit tt :tt
+
+-- We can define booleans
+-- Note we reuse the :tt label
+define Bool : U = {:tt :ff}
+define true : Bool = :tt
+define false : Bool = :ff
+
+-- if then else...
+define if : Bool -> forall (A : U) -> A -> A -> A
+          = \ b A t f -> switch b (\ _ -> A) { :tt -> t ; :ff -> f }
+
+-- And a small example
+define not : Bool -> Bool
+           = \ b -> if b Bool false true
+
+type (\ _ Cx -> Cx) : Leibniz Bool (not (not true)) true
+eval not (not true)
+
+-- An empty finite set is a thing too
+define Void : U = {}
+
+define absurd : Void -> forall (A : U) -> A
+              = \ x A -> switch x (\ _ -> A) {}

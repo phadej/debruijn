@@ -1,0 +1,5 @@
+Error: examples/errors/error-arr-not-u.ptt:1:37: forall type should have type U
+  * actual: U -> U
+  * When checking that U -> U has type U -> U
+  * When infering type of U -> U : U -> U
+ExitFailure
