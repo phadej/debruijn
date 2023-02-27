@@ -1,0 +1,9 @@
+packages: debruijn
+packages: debruijn-safe
+
+-- demo package
+packages: nanott/
+
+tests: True
+
+-- constraints: nanott +debruijn-safe

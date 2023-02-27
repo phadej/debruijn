@@ -1,0 +1,6 @@
+branches: master
+
+constraint-set debruijn-safe
+  constraints: nanott +debruijn-safe
+  tests: True
+  run-tests: True
