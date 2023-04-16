@@ -179,7 +179,7 @@ class Renamable t => RenamableA t where
     renameA = grename
 
     -- | Generic renaming of a term @t@ using any 'IdxMapping'.
-    grename :: forall m f ctx ctx'. (Applicative f, IdxMapping f m) => m ctx ctx' -> t ctx -> f (t ctx')
+    grename :: forall m f ctx ctx'. IdxMapping f m => m ctx ctx' -> t ctx -> f (t ctx')
 
 instance Renamable Proxy where
     rename _ _ = Proxy
