@@ -17,6 +17,7 @@ module DeBruijn.Ren (
     unusedIdx,
     -- * Renamable things
     IdxMapping (..),
+    keepAdd,
     Renamable (..),
     RenamableA (..),
     defaultRename,
@@ -27,6 +28,7 @@ import Data.Functor.Identity (Identity (..))
 import Data.Kind             (Constraint, Type)
 import Data.Proxy            (Proxy (..))
 
+import DeBruijn.Add
 import DeBruijn.Ctx
 import DeBruijn.Env
 import DeBruijn.Idx
@@ -101,7 +103,7 @@ unusedIdx s = MkRenA $ tabulateEnv (SS s) $ unIdx Nothing Just
 
 -- | 'IdxMapping' generalizes over various index mappings, also effectful ones.
 type IdxMapping :: (Type -> Type) -> (Ctx -> Ctx -> Type) -> Constraint
-class IdxMapping f t | t -> f where
+class Applicative f => IdxMapping f t | t -> f where
     -- | 'IdxMapping' action.
     mapIdx :: t ctx ctx' -> Idx ctx -> f (Idx ctx')
 
@@ -114,6 +116,16 @@ class IdxMapping f t | t -> f where
     -- This is useful when you have explicit weakening in your terms.
     -- (a similar idea as in @bound@'s @Scope@ possibly lifting whole term).
     weakenIdxMapping :: Wk ctx ctx' -> t ctx' ctx'' -> t ctx ctx''
+
+-- | 'keep' 'IdxMapping' @arity@ times.
+keepAdd
+    :: IdxMapping f m
+    => Add arity ctxA ctxA'
+    -> m ctxA ctxB
+    -> (forall ctxB'. Add arity ctxB ctxB' -> m ctxA' ctxB' -> r)
+    -> r
+keepAdd AZ     w kont = kont AZ w
+keepAdd (AS a) w kont = keepAdd a w $ \a' w' -> kont (AS a') (keep w')
 
 instance IdxMapping Identity Wk where
     keep = KeepWk

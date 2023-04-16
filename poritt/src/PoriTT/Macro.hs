@@ -1,8 +1,8 @@
 module PoriTT.Macro where
 
-import PoriTT.Well
 import PoriTT.Base
 import PoriTT.Name
+import PoriTT.Well
 
 -- | A macro is expanded in renamer.
 data Macro where

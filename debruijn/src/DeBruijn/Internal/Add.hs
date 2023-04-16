@@ -9,8 +9,10 @@ module DeBruijn.Internal.Add (
     unrzeroAdd,
     lzeroAdd,
     unlzeroAdd,
-    keepAdd,
-    unkeepAdd,
+    rsuccAdd,
+    unrsuccAdd,
+    lsuccAdd,
+    unlsuccAdd,
     swapAdd,
     unswapAdd,
 ) where
@@ -82,7 +84,7 @@ adding :: Size n -> Some (Add n ctx)
 adding (UnsafeSize n) = Some (UnsafeAdd n)
 
 -------------------------------------------------------------------------------
--- Lemmas
+-- Lemmas: zero
 -------------------------------------------------------------------------------
 
 -- | @n + 0 ≡ 0@
@@ -101,13 +103,29 @@ lzeroAdd _ = AZ
 unlzeroAdd :: Add EmptyCtx n m -> n :~: m
 unlzeroAdd AZ = Refl
 
+-------------------------------------------------------------------------------
+-- Lemmas: succ
+-------------------------------------------------------------------------------
+
 -- | @n + m ≡ p → n + S m ≡ S p@
-keepAdd :: Add n m p -> Add n (S m) (S p)
-keepAdd = coerce
+rsuccAdd :: Add n m p -> Add n (S m) (S p)
+rsuccAdd = coerce
 
 -- | @n + S m ≡ S p → n + m ≡ p@
-unkeepAdd :: Add n (S m) (S p) -> Add n m p
-unkeepAdd = coerce
+unrsuccAdd :: Add n (S m) (S p) -> Add n m p
+unrsuccAdd = coerce
+
+-- | @n + m ≡ p → S n + m ≡ S p@
+lsuccAdd :: Add n m p -> Add (S n) m (S p)
+lsuccAdd = AS
+
+-- | @S n + m ≡ S p → n + m ≡ p@
+unlsuccAdd :: Add (S n) m (S p) -> Add n m p
+unlsuccAdd (AS a)= a
+
+-------------------------------------------------------------------------------
+-- Lemmas: swap
+-------------------------------------------------------------------------------
 
 -- | @n + S m ≡ p → S n + m ≡ p@
 swapAdd :: Add n (S m) p -> Add (S n) m p

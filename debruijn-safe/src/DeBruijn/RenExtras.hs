@@ -16,4 +16,3 @@ weakenSize s0 = weaken (go s0) where
     go :: Size ctx -> Wk EmptyCtx ctx
     go SZ     = IdWk
     go (SS s) = SkipWk (go s)
-

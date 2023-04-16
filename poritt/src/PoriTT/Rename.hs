@@ -12,8 +12,8 @@ import qualified Data.Map.Strict as Map
 
 import PoriTT.Base
 import PoriTT.Global
-import PoriTT.Macro
 import PoriTT.Loc
+import PoriTT.Macro
 import PoriTT.Name
 import PoriTT.PP
 
@@ -163,7 +163,7 @@ expandMacro
 expandMacro ctx ns ts kont = go (rzeroAdd (sizeEnv ns)) EmptyEnv ts where
     go :: Add n m arity -> Env m (Well ctx) -> [Either Selector (Well ctx)] -> Validate r
     go AZ     ss rest             = kont ss rest
-    go (AS a) ss (Right s : rest) = go (keepAdd a) (ss :> s) rest
+    go (AS a) ss (Right s : rest) = go (rsuccAdd a) (ss :> s) rest
     go (AS _) _  (Left s : _)     = renameError ctx ("Selector " <+> prettySelector s <+> "given as macro argument") []
     go (AS _) _  []               = renameError ctx "Not enough macro arguments" []
 

@@ -9,8 +9,10 @@ module DeBruijn.Add (
     unrzeroAdd,
     lzeroAdd,
     unlzeroAdd,
-    keepAdd,
-    unkeepAdd,
+    rsuccAdd,
+    unrsuccAdd,
+    lsuccAdd,
+    unlsuccAdd,
     swapAdd,
     unswapAdd,
 ) where
@@ -64,7 +66,7 @@ adding SZ     = Some AZ
 adding (SS s) = case adding s of Some a -> Some (AS a)
 
 -------------------------------------------------------------------------------
--- Lemmas
+-- Lemmas: zero
 -------------------------------------------------------------------------------
 
 -- | @n + 0 ≡ 0@
@@ -85,17 +87,31 @@ lzeroAdd _ = AZ
 unlzeroAdd :: Add EmptyCtx n m -> n :~: m
 unlzeroAdd AZ = Refl
 
--- TODO: I'm not happy with the names, but I don't have a good naming scheme for these lemmas.
+-------------------------------------------------------------------------------
+-- Lemmas: succ
+-------------------------------------------------------------------------------
 
 -- | @n + m ≡ p → n + S m ≡ S p@
-keepAdd :: Add n m p -> Add n (S m) (S p)
-keepAdd AZ     = AZ
-keepAdd (AS a) = AS $ keepAdd a
+rsuccAdd :: Add n m p -> Add n (S m) (S p)
+rsuccAdd AZ     = AZ
+rsuccAdd (AS a) = AS $ rsuccAdd a
 
 -- | @n + S m ≡ S p → n + m ≡ p@
-unkeepAdd :: Add n (S m) (S p) -> Add n m p
-unkeepAdd AZ     = AZ
-unkeepAdd (AS a) = swapAdd a
+unrsuccAdd :: Add n (S m) (S p) -> Add n m p
+unrsuccAdd AZ     = AZ
+unrsuccAdd (AS a) = swapAdd a
+
+-- | @n + m ≡ p → S n + m ≡ S p@
+lsuccAdd :: Add n m p -> Add (S n) m (S p)
+lsuccAdd = AS
+
+-- | @S n + m ≡ S p → n + m ≡ p@
+unlsuccAdd :: Add (S n) m (S p) -> Add n m p
+unlsuccAdd (AS a)= a
+
+-------------------------------------------------------------------------------
+-- Lemmas: swap
+-------------------------------------------------------------------------------
 
 -- | @n + S m ≡ p → S n + m ≡ p@
 swapAdd :: Add n (S m) p -> Add (S n) m p
@@ -104,4 +120,4 @@ swapAdd (AS a) = AS $ swapAdd a
 
 -- | @S n + m ≡ p → n + S m ≡ p@
 unswapAdd :: Add (S n) m p -> Add n (S m) p
-unswapAdd (AS a) = keepAdd a
+unswapAdd (AS a) = rsuccAdd a

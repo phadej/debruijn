@@ -14,4 +14,3 @@ import Unsafe.Coerce (unsafeCoerce)
 -- Note: this has different requirements than 'sinkSize'.
 weakenSize :: Renamable t => Size ctx -> t EmptyCtx -> t ctx
 weakenSize _ = unsafeCoerce
-

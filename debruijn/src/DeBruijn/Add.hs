@@ -9,8 +9,10 @@ module DeBruijn.Add (
     unrzeroAdd,
     lzeroAdd,
     unlzeroAdd,
-    keepAdd,
-    unkeepAdd,
+    rsuccAdd,
+    unrsuccAdd,
+    lsuccAdd,
+    unlsuccAdd,
     swapAdd,
     unswapAdd,
 ) where
