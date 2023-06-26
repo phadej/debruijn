@@ -1,0 +1,10 @@
+Error: examples/hasty.ptt:2:25: Variable used at different stage
+  * variable: x
+  * expected: 1
+  * actual:   0
+  * When infering type of x
+  * When infering type of ~x
+  * When checking that ~x has type A
+  * When checking that \ x -> ~x has type Code A -> A
+  * When checking that \ A x -> ~x has type forall (A : U) -> Code A -> A
+ExitFailure

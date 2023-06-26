@@ -47,6 +47,7 @@ data Token
     | TkDescS             -- ^ @`S@
     | TkDescX             -- ^ @`X@
     | TkDescInd           -- ^ @indDesc@
+    | TkCode              -- ^ @Code@
     | TkLParen            -- ^ left parenthesis: @(@
     | TkRParen            -- ^ right parenthesis: @)@
     | TkLBracket          -- ^ left parenthesis: @[@
@@ -61,6 +62,7 @@ data Token
     | TkAst               -- ^ ast: @*@
     | TkEquals            -- ^ equals: @=@
     | TkHole              -- ^ hole: @_@
+    | TkTilde             -- ^ tilde: @~@
     | TkEOF               -- ^ end-of-file token
     | TkError String
   deriving (Eq)
@@ -85,6 +87,7 @@ showToken TkMu        = "mu"
 showToken TkInd       = "ind"
 showToken TkCon       = "con"
 showToken TkDesc      = "Desc"
+showToken TkCode      = "Code"
 showToken TkDesc1     = "`1"
 showToken TkDescS     = "`S"
 showToken TkDescX     = "`X"
@@ -95,6 +98,7 @@ showToken TkLBracket  = "["
 showToken TkRBracket  = "]"
 showToken TkLBrace    = "{"
 showToken TkRBrace    = "}"
+showToken TkTilde     = "~"
 showToken TkArrow     = "->"
 showToken TkBackSlash = "\\"
 showToken TkColon     = ":"
@@ -151,9 +155,9 @@ isSpace c = ' ' == c || '\t' == c || '\n' == c
 
 isIdentChar :: Char -> Bool
 isIdentChar c
-    | isSpace c             = False
-    | elem c ('\\':"(){};") = False
-    | otherwise             = isPrint c
+    | isSpace c                = False
+    | elem c ('\\':"(){}[]~;") = False
+    | otherwise                = isPrint c
 
 -------------------------------------------------------------------------------
 -- Scanning function
@@ -164,8 +168,11 @@ scan ls@(LS contents loc) = case T.uncons contents of
     Nothing                -> (TkEOF,       ls)
     Just ('(' , contents') -> (TkLParen,    LS contents' (advanceLoc loc "("))
     Just (')' , contents') -> (TkRParen,    LS contents' (advanceLoc loc ")"))
+    Just ('[' , contents') -> (TkLBracket,  LS contents' (advanceLoc loc "["))
+    Just (']' , contents') -> (TkRBracket,  LS contents' (advanceLoc loc "]"))
     Just ('{' , contents') -> (TkLBrace,    LS contents' (advanceLoc loc "{"))
     Just ('}' , contents') -> (TkRBrace,    LS contents' (advanceLoc loc "}"))
+    Just ('~' , contents') -> (TkTilde,     LS contents' (advanceLoc loc "~"))
     Just (';' , contents') -> (TkSemi,      LS contents' (advanceLoc loc ";"))
     Just ('\\', contents') -> (TkBackSlash, LS contents' (advanceLoc loc "\\"))
     Just (c,    _        )
@@ -195,6 +202,7 @@ classify "indDesc" = TkDescInd
 classify "mu"      = TkMu
 classify "con"     = TkCon
 classify "ind"     = TkInd
+classify "Code"    = TkCode
 classify "->"      = TkArrow
 classify ":"       = TkColon
 classify ","       = TkComma

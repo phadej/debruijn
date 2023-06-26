@@ -72,6 +72,13 @@ data Raw where
     -- | Fixed-point induction: @ind e M f@
     RInd :: Raw -> Raw -> Raw -> Raw
 
+    -- | Code: @Code t@
+    RCod :: Raw -> Raw
+    -- | Quote: @<t>@
+    RQuo :: Raw -> Raw
+    -- | Splice: ~t
+    RSpl :: Raw -> Raw
+
     -- | type annotation: @t : T@
     RAnn :: Raw -> Raw -> Raw
     -- | let binding: @let x : t = s in e@ or @let x = f in e@
@@ -107,7 +114,8 @@ class ToRaw t where
     toRaw :: NameScope -> Env ctx Name -> t ctx -> Raw
 
 -- precedences
-appp, annp, funp, sgmp, comp, keyp :: Int
+appp, annp, funp, sgmp, comp, keyp, splp :: Int
+splp = 11 -- 
 appp = 10 -- left
 sgmp = 5  -- right
 funp = 4  -- right
@@ -142,7 +150,10 @@ prettyRaw _ RDsc             = "Desc"
 prettyRaw _ RDe1             = "`1"
 prettyRaw d (RDeS s t)       = ppParensIf (d > appp) $ "`S" <+> prettyRaw (appp + 1) s <+> prettyRaw (appp + 1) t
 prettyRaw d (RDeX t)         = ppParensIf (d > appp) $ "`X" <+> prettyRaw (appp + 1) t
-prettyRaw d (RDeI e m x y z) = ppParensIf (d > appp) $ prettyApp "indDesc" (map (prettyRaw 11) [e,m,x,y,z])
+prettyRaw d (RDeI e m x y z) = ppParensIf (d > appp) $ prettyApp "indDesc" (map (prettyRaw (appp +1)) [e,m,x,y,z])
+prettyRaw d (RCod a)         = ppParensIf (d > appp) $ prettyApp "Code" [prettyRaw (appp + 1) a]
+prettyRaw _ (RQuo t)         = ppQuote $ prettyRaw 0 t
+prettyRaw d (RSpl t)         = ppParensIf (d > splp) $ "~" <> prettyRaw (splp + 1) t
 prettyRaw _ RUni             = "U"
 prettyRaw _ RHol             = "_"
 

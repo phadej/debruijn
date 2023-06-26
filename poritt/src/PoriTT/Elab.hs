@@ -22,6 +22,7 @@ import PoriTT.Name
 import PoriTT.Nice
 import PoriTT.PP
 import PoriTT.Quote
+import PoriTT.Stage
 import PoriTT.Term
 import PoriTT.Used
 import PoriTT.Well
@@ -39,22 +40,24 @@ data ElabCtx ctx ctx' = ElabCtx
     , values  :: !(EvalEnv ctx ctx')
     , types   :: !(Env ctx (VTerm ctx'))
     , types'  :: !(Env ctx' (VTerm ctx'))
+    , stages  :: Env ctx Stage
+    , cstage  :: Stage
     , size    :: !(Size ctx')
     , loc     :: !(Loc)
     , doc     :: ![Doc]
     }
 
 sinkElabCtx :: Name -> VTerm ctx' -> ElabCtx ctx ctx' -> ElabCtx ctx (S ctx')
-sinkElabCtx x' t' (ElabCtx xs xs' ns v ts ts' s l pp) = ElabCtx xs (xs' :> x') ns (mapSink v) (mapSink ts) (mapSink ts' :> sink t') (SS s) l pp
+sinkElabCtx x' t' (ElabCtx xs xs' ns v ts ts' ss cs s l pp) =
+    ElabCtx xs (xs' :> x') ns (mapSink v) (mapSink ts) (mapSink ts' :> sink t') ss cs (SS s) l pp
 
 -- | Empty elaboration context.
 --
 -- Needs global 'NameScope' for pretty-printing.
 --
 emptyElabCtx :: NameScope -> ElabCtx EmptyCtx EmptyCtx
-emptyElabCtx ns = ElabCtx EmptyEnv EmptyEnv ns EmptyEnv EmptyEnv EmptyEnv SZ (startLoc "<unknown>") []
+emptyElabCtx ns = ElabCtx EmptyEnv EmptyEnv ns EmptyEnv EmptyEnv EmptyEnv EmptyEnv stage0 SZ (startLoc "<unknown>") []
 
--- TODO: Technically we should take two names.
 bind
     :: ElabCtx ctx ctx'
     -> Name                     -- ^ term name
@@ -69,13 +72,15 @@ bind'
     -> VElim ctx'        -- ^ value
     -> VTerm ctx'        -- ^ type
     -> ElabCtx (S ctx) ctx'
-bind' (ElabCtx xs xs' ns v ts ts' s l pp) x t a = ElabCtx
+bind' (ElabCtx xs xs' ns v ts ts' ss cs s l pp) x t a = ElabCtx
     { names   = xs :> x
     , names'  = xs'
     , nscope  = ns
     , values  = v :> t
     , types   = ts :> a
     , types'  = ts'
+    , stages  = ss :> cs
+    , cstage  = cs
     , size    = s
     , loc     = l
     , doc     = pp
@@ -207,7 +212,7 @@ check' ctx (WMuu t)     (force -> VUni)= do
     t' <- check ctx t VDsc
     return (Muu t')
 check' ctx (WMuu _)     ty =
-    elabError ctx "Desc should have type U"
+    elabError ctx "mu should have type U"
         [ "actual:" <+> prettyVTermCtx ctx ty
         ]
 check' ctx (WCon t)     (force -> ty@(VMuu d))= do
@@ -247,6 +252,22 @@ check' ctx (WDeX _)   ty =
         [ "actual:" <+> prettyVTermCtx ctx ty
         ]
 
+check' ctx (WCod t)     (force -> VUni)= do
+    t' <- check ctx t VUni
+    return (Cod t')
+check' ctx (WCod _)     ty =
+    elabError ctx "Code should have type U"
+        [ "actual:" <+> prettyVTermCtx ctx ty
+        ]
+    
+check' ctx (WQuo t)     (force -> VCod a) = do
+    t' <- check ctx { cstage = pred ctx.cstage } t a
+    return (Quo t')
+check' ctx (WQuo _)     ty =
+    elabError ctx "quote should have type Code"
+        [ "actual:" <+> prettyVTermCtx ctx ty
+        ]
+
 check' ctx WHol        ty =
     elabError ctx "Checking a hole" $
         [ "type:" <+> prettyVTermCtx ctx ty
@@ -267,7 +288,15 @@ check' ctx e            a = do
 infer' :: forall ctx ctx'. ElabCtx ctx ctx' -> Well ctx -> Either String (Elim ctx, VTerm ctx')
 infer' ctx (WLoc l r)
     = infer' ctx { loc = l } r
-infer' ctx (WVar i) =
+infer' ctx (WVar i) = do
+    let s = lookupEnv i ctx.stages
+    when (s /= ctx.cstage) $ do
+        elabError ctx "Variable used at different stage"
+            [ "variable:" <+> prettyName (lookupEnv i ctx.names)
+            , "expected:" <+> prettyStage ctx.cstage
+            , "actual:  " <+> prettyStage s
+            ]
+
     pure (Var i, lookupEnv i ctx.types)
 infer' ctx (WGbl g) =
     pure (Gbl g, sinkSize ctx.size (gblType g))
@@ -290,6 +319,10 @@ infer' ctx (WCon _) =
 infer' ctx (WLbl _) =
     elabError ctx
     "Cannot infer type of a label"
+    []
+infer' ctx (WQuo _) =
+    elabError ctx
+    "Cannot infer type of a quote"
     []
 infer' ctx (WPie x a b) = do
     a' <- check ctx a VUni
@@ -320,6 +353,9 @@ infer' ctx (WDeS t s) = do
 infer' ctx (WMuu t) = do
     t' <- check ctx t VDsc
     return (Ann (Muu t') Uni, VUni)
+infer' ctx (WCod a) = do
+    a' <- check ctx a VUni
+    return (Ann (Cod a') Uni, VUni)
 infer' ctx (WApp f t) = do
     (f', ft) <- infer ctx f
     case force ft of
@@ -422,9 +458,19 @@ infer' ctx (WInd e m t) = do
                 , evalTerm ctx.size (ctx.values :> mv :> ev) (var I1 @@ var IZ)
                 )
 
-        _ -> elabError ctx "ind doesn't have type mu"
+        _ -> elabError ctx "ind argument doesn't have type mu"
             [ "actual:" <+> prettyVTermCtx ctx et
             ]
+
+infer' ctx (WSpl e) = do
+    (e', et) <- infer ctx { cstage = succ ctx.cstage } e
+    case force et of
+        VCod a -> do
+            return (Spl e', a)
+
+        _ -> elabError ctx "splice argument doesn't have type Code"
+            [ "actual:" <+> prettyVTermCtx ctx et
+            ]        
 
 infer' ctx (WAnn t s) = do
     s' <- check ctx s VUni

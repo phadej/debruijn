@@ -147,12 +147,19 @@ resolve' ctx (RCon t) =
     WCon <$> resolve' ctx t
 resolve' ctx (RInd e m c) =
     WInd <$> resolve' ctx e <*> resolve' ctx m <*> resolve' ctx c
+resolve' ctx (RCod a) =
+    WCod <$> resolve' ctx a
+resolve' ctx (RQuo a) =
+    WQuo <$> resolve' ctx a
+resolve' ctx (RSpl a) =
+    WSpl <$> resolve' ctx a
 resolve' _   RHol = pure WHol
 resolve' _   RUni = pure WUni
 resolve' _   RDsc = pure WDsc
 resolve' _   RDe1 = pure WDe1
 resolve' _   (RLbl l) = pure (WLbl l)
 resolve' _   (RFin ls) = pure (WFin ls)
+
 
 expandMacro
     :: forall arity ctx r. RenameCtx ctx

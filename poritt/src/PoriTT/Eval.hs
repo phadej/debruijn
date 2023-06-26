@@ -24,6 +24,7 @@ module PoriTT.Eval (
     vdei,
     vind,
     vemb,
+    vspl,
     -- ** Smart constructors
     vann,
     varr,
@@ -38,79 +39,13 @@ import PoriTT.Name
 import PoriTT.Nice
 import PoriTT.Term
 import PoriTT.Used
+import PoriTT.Value
 
 import {-# SOURCE #-} PoriTT.Builtins (allTermGlobal)
 
 -------------------------------------------------------------------------------
--- Evaluation errors
--------------------------------------------------------------------------------
-
--- | Evaluation error.
---
--- These shouldn't happen if we evaluate type-correct code.
---
-data EvalError
-    = EvalErrorApp  -- ^ error in function application
-    | EvalErrorSel  -- ^ error in selector application
-    | EvalErrorSwh  -- ^ error in @switch@
-    | EvalErrorDeI  -- ^ error in @indDesc@
-    | EvalErrorInd  -- ^ error in @ind@
-  deriving Show
-
--------------------------------------------------------------------------------
 -- VTerm and VElim
 -------------------------------------------------------------------------------
-
--- | Semantic term
-type VTerm :: Ctx -> Type
-data VTerm ctx where
-    VPie :: !Name -> (VTerm ctx) -> !(Closure ctx) -> VTerm ctx
-    VLam :: !Name -> !(Closure ctx)  -> VTerm ctx
-    VUni :: VTerm ctx
-    VDsc :: VTerm ctx
-    VDe1 :: VTerm ctx
-    VDeS :: VTerm ctx -> VTerm ctx -> VTerm ctx
-    VDeX :: VTerm ctx -> VTerm ctx
-    VMuu :: VTerm ctx -> VTerm ctx
-    VCon :: VTerm ctx -> VTerm ctx
-    VSgm :: !Name -> (VTerm ctx) -> !(Closure ctx) -> VTerm ctx
-    VMul :: VTerm ctx -> VTerm ctx -> VTerm ctx
-    VLbl :: !Label -> VTerm ctx
-    VFin :: !(Set Label) -> VTerm ctx
-    VEmb :: VElim ctx -> VTerm ctx  -- no VAnn
-
--- | Semantic elimination
-type VElim :: Ctx -> Type
-data VElim ctx where
-    VErr :: EvalError -> VElim ctx
-    VAnn :: VTerm ctx -> VTerm ctx -> VElim ctx
-    VGbl :: !Global -> !(Spine ctx) -> VElim ctx -> VElim ctx
-    VNeu :: Lvl ctx -> Spine ctx -> VElim ctx
-
-deriving instance Show (VTerm ctx)
-deriving instance Show (VElim ctx)
-
-instance Sinkable VTerm where
-    mapLvl _ VUni          = VUni
-    mapLvl _ VDsc          = VDsc
-    mapLvl _ VDe1          = VDe1
-    mapLvl f (VDeS t s)    = VDeS (mapLvl f t) (mapLvl f s)
-    mapLvl f (VDeX t)      = VDeX (mapLvl f t)
-    mapLvl f (VMuu t)      = VMuu (mapLvl f t)
-    mapLvl f (VCon t)      = VCon (mapLvl f t)
-    mapLvl f (VLam x clos) = VLam x (mapLvl f clos)
-    mapLvl f (VPie x a b)  = VPie x (mapLvl f a) (mapLvl f b)
-    mapLvl f (VSgm x a b)  = VSgm x (mapLvl f a) (mapLvl f b)
-    mapLvl f (VMul t s)    = VMul (mapLvl f t) (mapLvl f s)
-    mapLvl _ (VLbl l)      = VLbl l
-    mapLvl _ (VFin ls)     = VFin ls
-    mapLvl f (VEmb e)      = VEmb (mapLvl f e)
-
-instance Sinkable VElim where
-    mapLvl _ (VErr msg)    = VErr msg
-    mapLvl f (VNeu l sp)   = VNeu (mapLvl f l) (mapLvl f sp)
-    mapLvl f (VGbl g sp t) = VGbl g (mapLvl f sp) (mapLvl f t)
-    mapLvl f (VAnn t s)    = VAnn (mapLvl f t) (mapLvl f s)
 
 -- | Force globals, when we need to pattern match on types.
 force :: VTerm ctx -> VTerm ctx
@@ -118,43 +53,8 @@ force (VEmb (VGbl _ _ v)) = force (vemb v)
 force v                   = v
 
 -------------------------------------------------------------------------------
--- Spine
--------------------------------------------------------------------------------
-
--- | Spine of neutral terms ('VNeu').
-type Spine :: Ctx -> Type
-data Spine ctx
-    = VNil
-    | VApp !(Spine ctx) (VTerm ctx)
-    | VSel !(Spine ctx) !Selector
-    | VSwh !(Spine ctx) (VTerm ctx) !(Map Label (VTerm ctx)) -- Note: motive is lazy as we don't evaluate it. It's needed for type-checking only.
-    | VDeI !(Spine ctx) (VTerm ctx) (VTerm ctx) (VTerm ctx) (VTerm ctx)
-    | VInd !(Spine ctx) (VTerm ctx) (VTerm ctx)
-  deriving Show
-
-instance Sinkable Spine where
-    mapLvl _ VNil              = VNil
-    mapLvl f (VApp xs x)       = VApp (mapLvl f xs) (mapLvl f x)
-    mapLvl f (VSel xs s)       = VSel (mapLvl f xs) s
-    mapLvl f (VSwh xs m rs)    = VSwh (mapLvl f xs) (mapLvl f m) (fmap (mapLvl f) rs)
-    mapLvl f (VDeI xs m x y z) = VDeI (mapLvl f xs) (mapLvl f m) (mapLvl f x) (mapLvl f y) (mapLvl f z)
-    mapLvl f (VInd xs m t)     = VInd (mapLvl f xs) (mapLvl f m) (mapLvl f t)
-
--------------------------------------------------------------------------------
 -- Closure
 -------------------------------------------------------------------------------
-
-type EvalEnv :: Ctx -> Ctx -> Type
-type EvalEnv ctx ctx' = Env ctx (VElim ctx')
-
-emptyEvalEnv :: EvalEnv EmptyCtx EmptyCtx
-emptyEvalEnv = EmptyEnv
-
--- TODO: check closure to have Elim in it.
-type Closure :: Ctx -> Type
-data Closure ctx' where Closure :: EvalEnv ctx ctx' -> Term (S ctx) -> Closure ctx'
-
-deriving instance Show (Closure ctx)
 
 run :: Size ctx -> Closure ctx -> VElim ctx -> VTerm ctx
 run s (Closure env f) t = evalTerm s (env :> t) f
@@ -162,12 +62,6 @@ run s (Closure env f) t = evalTerm s (env :> t) f
 -- | Run closure with (neutral) variable as an argument.
 runZ :: Size ctx -> Closure ctx -> VTerm (S ctx)
 runZ s clos = run (SS s) (sink clos) (valZ s)
-
-valZ :: Size ctx -> VElim (S ctx)
-valZ s = VNeu (lvlZ s) VNil
-
-instance Sinkable Closure where
-    mapLvl f (Closure env t) = Closure (fmap (mapLvl f) env) t
 
 -------------------------------------------------------------------------------
 -- Evaluation
@@ -188,7 +82,10 @@ evalTerm s env (Emb e)     = vemb (evalElim s env e)
 evalTerm _ _   (Lbl l)     = VLbl l
 evalTerm _ _   (Fin ls)    = VFin ls
 evalTerm s env (Mul t r)   = VMul (evalTerm s env t) (evalTerm s env r)
+evalTerm s env (Cod a)     = VCod (evalTerm s env a)
+evalTerm s env (Quo t)     = vquo (evalTerm s env t)
 evalTerm s env (WkT w t)   = evalTerm s (weakenEnv w env) t
+
 
 evalElim :: Size ctx' -> EvalEnv ctx ctx' -> Elim ctx -> VElim ctx'
 evalElim _ env (Var x)         = lookupEnv x env
@@ -199,6 +96,7 @@ evalElim s env (Sel e z)       = vsel s (evalElim s env e) z
 evalElim s env (Swh e m ts)    = vswh s (evalElim s env e) (evalTerm s env m) (fmap (evalTerm s env) ts)
 evalElim s env (DeI e m x y z) = vdei s (evalElim s env e) (evalTerm s env m) (evalTerm s env x) (evalTerm s env y) (evalTerm s env z)
 evalElim s env (Ind e m t)     = vind s (evalElim s env e) (evalTerm s env m) (evalTerm s env t)
+evalElim s env (Spl e)         = vspl s (evalElim s env e)
 evalElim s env (Let _ t r)     = evalElim s (env :> evalElim s env t) r
 evalElim s env (WkE w e)       = evalElim s (weakenEnv w env) e
 
@@ -305,3 +203,25 @@ vind _ (VAnn _ _)       _ _ = VErr EvalErrorInd
 vind _ (VNeu l sp)      m t = VNeu l (VInd sp m t)
 vind s (VGbl g sp h)    m t = VGbl g (VInd sp m t) (vind s h m t)
 vind _ (VErr msg)       _ _ = VErr msg
+
+vspl :: Size ctx -> VElim ctx -> VElim ctx
+vspl _ (VAnn (VQuo t) (force -> VCod a)) = vann t a
+
+vspl s (VAnn (VEmb e) _)                 = vspl s e
+vspl _ (VAnn _ _)                        = VErr EvalErrorSpl
+vspl _ (VNeu l sp)                       = VNeu l (VSpl sp)
+vspl s (VGbl g sp h)                     = VGbl g (VSpl sp) (vspl s h)
+vspl _ (VErr msg)                        = VErr msg
+
+vquo :: VTerm ctx -> VTerm ctx
+vquo = VQuo
+
+{-
+vquo (VEmb e) = vemb (vquo' e)
+
+vquo' :: VElim ctx -> VElim ctx
+vquo' (VNeu l (VSpl sp))   = VNeu l sp
+vquo' (VGbl g (VSpl sp) h) = VGbl g sp (vquo' h)
+vquo' e                    = ?
+
+-}

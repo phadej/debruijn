@@ -129,8 +129,10 @@ library
     PoriTT.Raw
     PoriTT.Rename
     PoriTT.Simpl
+    PoriTT.Stage
     PoriTT.Term
     PoriTT.Used
+    PoriTT.Value
     PoriTT.Well
 
 executable poritt

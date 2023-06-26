@@ -25,6 +25,8 @@ simplTerm size sub (DeS s t)   = DeS (simplTerm size sub s) (simplTerm size sub 
 simplTerm size sub (DeX t)     = DeX (simplTerm size sub t)
 simplTerm size sub (Muu t)     = Muu (simplTerm size sub t)
 simplTerm size sub (Con t)     = Con (simplTerm size sub t)
+simplTerm size sub (Cod a)     = Cod (simplTerm size sub a)
+simplTerm size sub (Quo t)     = Quo (simplTerm size sub t)
 simplTerm size sub (Emb e)
     | Ann t _ <- e
     = simplTerm size sub t
@@ -86,6 +88,10 @@ simplElim size sub (Ind e m t)
 simplElim size sub (Ann t s)
     | otherwise
     = Ann (simplTerm size sub t) (simplTerm size sub s)
+
+simplElim size sub (Spl e)
+    | otherwise
+    = Spl (simplElim size sub e)
 
 shouldInline :: Elim ctx -> Bool
 shouldInline (Var _)         = True

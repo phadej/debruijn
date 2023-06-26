@@ -1,0 +1,2 @@
+define tardy : forall (A : U) -> A -> Code A
+             = \ A x -> [ x ]

@@ -1,0 +1,10 @@
+Error: examples/tardy.ptt:2:26: Variable used at different stage
+  * variable: x
+  * expected: -1
+  * actual:   0
+  * When infering type of x
+  * When checking that x has type A
+  * When checking that [x] has type Code A
+  * When checking that \ x -> [x] has type A -> Code A
+  * When checking that \ A x -> [x] has type forall (A : U) -> A -> Code A
+ExitFailure

@@ -35,6 +35,9 @@ data Well ctx where
     WMuu :: Well ctx -> Well ctx
     WCon :: Well ctx -> Well ctx
     WInd :: Well ctx -> Well ctx -> Well ctx -> Well ctx
+    WCod :: Well ctx -> Well ctx
+    WQuo :: Well ctx -> Well ctx
+    WSpl :: Well ctx -> Well ctx
     WHol :: Well ctx
     WLoc :: Loc -> Well ctx -> Well ctx
 
@@ -69,6 +72,9 @@ instance RenamableA Well where
     grename r (WMul t s)       = WMul <$> grename r t <*> grename r s
     grename r (WMuu d)         = WMuu <$> grename r d
     grename r (WCon t)         = WCon <$> grename r t
+    grename r (WCod t)         = WCod <$> grename r t
+    grename r (WQuo t)         = WQuo <$> grename r t
+    grename r (WSpl t)         = WSpl <$> grename r t
     grename r (WInd e m c)     = WInd <$> grename r e <*> grename r m <*> grename r c
     grename r (WLoc l t)       = WLoc l <$> grename r t
 
@@ -136,6 +142,10 @@ instance ToRaw Well where
     toRaw ns env (WDeI e m x y z) = RDeI (toRaw ns env e) (toRaw ns env m) (toRaw ns env x) (toRaw ns env y) (toRaw ns env z)
     toRaw ns env (WMuu d)         = RMuu (toRaw ns env d)
     toRaw ns env (WCon t)         = RCon (toRaw ns env t)
+    toRaw ns env (WCod t)         = RCod (toRaw ns env t)
+    toRaw ns env (WQuo t)         = RQuo (toRaw ns env t)
+    toRaw ns env (WSpl t)         = RSpl (toRaw ns env t)
     toRaw ns env (WInd e m c)     = RInd (toRaw ns env e) (toRaw ns env m) (toRaw ns env c)
     toRaw ns env (WAnn t s)       = RAnn (toRaw ns env t) (toRaw ns env s)
     toRaw ns env (WLoc _ t)       = toRaw ns env t
+

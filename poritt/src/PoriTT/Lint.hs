@@ -17,6 +17,7 @@ import PoriTT.Global
 import PoriTT.Name
 import PoriTT.Nice
 import PoriTT.PP
+import PoriTT.Stage
 import PoriTT.Quote
 import PoriTT.Term
 import PoriTT.Used
@@ -29,6 +30,8 @@ data LintCtx ctx ctx' = LintCtx
     { values :: EvalEnv ctx ctx'
     , types  :: Env ctx (VTerm ctx')
     , types' :: Env ctx' (VTerm ctx')
+    , stages :: Env ctx Stage
+    , cstage :: Stage
     , names  :: Env ctx Name
     , names' :: Env ctx' Name
     , nscope :: NameScope
@@ -37,19 +40,19 @@ data LintCtx ctx ctx' = LintCtx
     }
 
 sinkLintCtx :: Name -> VTerm ctx' -> LintCtx ctx ctx' -> LintCtx ctx (S ctx')
-sinkLintCtx x' t' (LintCtx vs ts ts' xs xs' ns s pp) = LintCtx (mapSink vs) (mapSink ts) (mapSink ts' :> sink t') xs (xs' :> x') ns (SS s) pp
+sinkLintCtx x' t' (LintCtx vs ts ts' ss cs xs xs' ns s pp) = LintCtx (mapSink vs) (mapSink ts) (mapSink ts' :> sink t') ss cs xs (xs' :> x') ns (SS s) pp
 
 emptyLintCtx :: NameScope -> LintCtx EmptyCtx EmptyCtx
-emptyLintCtx ns = LintCtx EmptyEnv EmptyEnv EmptyEnv EmptyEnv EmptyEnv ns SZ []
+emptyLintCtx ns = LintCtx EmptyEnv EmptyEnv EmptyEnv EmptyEnv stage0 EmptyEnv EmptyEnv ns SZ []
 
 bind :: LintCtx ctx ctx' -> Name -> Name -> VTerm ctx' -> LintCtx (S ctx) (S ctx')
 bind ctx x x' a = bind' (sinkLintCtx x' a ctx) x (valZ (size ctx)) (sink a)
 
 bind' :: LintCtx ctx ctx' -> Name -> VElim ctx' -> VTerm ctx' -> LintCtx (S ctx) ctx'
-bind' (LintCtx vs ts ts' xs xs' ns s pp) x v t = LintCtx (vs :> v) (ts :> t) ts' (xs :> x) xs' ns s pp
+bind' (LintCtx vs ts ts' ss cs xs xs' ns s pp) x v t = LintCtx (vs :> v) (ts :> t) ts' (ss :> cs) cs (xs :> x) xs' ns s pp
 
 weakenLintCtx :: Wk ctx ctx' -> LintCtx ctx' ctx'' -> LintCtx ctx ctx''
-weakenLintCtx w (LintCtx vs ts ts' xs xs' ns s pp) = LintCtx (weakenEnv w vs) (weakenEnv w ts) ts' (weakenEnv w xs) xs' ns s pp
+weakenLintCtx w (LintCtx vs ts ts' ss cs xs xs' ns s pp) = LintCtx (weakenEnv w vs) (weakenEnv w ts) ts' (weakenEnv w ss) cs (weakenEnv w xs) xs' ns s pp
 
 -------------------------------------------------------------------------------
 -- Errors
@@ -266,6 +269,32 @@ lintCheck' ctx (DeX _)   ty =
         [ "actual:" <+> prettyVTermCtx ctx ty
         ]
 
+lintCheck' ctx (Cod e)     (force -> VUni) =
+    --
+    --  ⊢ U ∋ a
+    -- ----------------- code
+    --  ⊢ U ∋ Code a
+    --
+    lintCheck ctx e VUni
+
+lintCheck' ctx (Cod _)      ty   =
+    lintError ctx "Code should have type U"
+        [ "actual:" <+> prettyVTermCtx ctx ty
+        ]
+
+lintCheck' ctx (Quo t)   (force -> VCod a) =
+    --
+    --  ⊢ a ∋ t
+    -- ----------------- quote
+    --  ⊢ Code a ∋ [t]
+    --
+    lintCheck ctx { cstage = pred ctx.cstage } t a
+
+lintCheck' ctx (Quo _)   ty =
+    lintError ctx "quote should have type Code"
+        [ "actual:" <+> prettyVTermCtx ctx ty
+        ]
+
 lintCheck' ctx (Emb e)     a    = do
     --
     --  ⊢ e ∈ B
@@ -286,12 +315,21 @@ lintCheck' ctx (WkT w t) a =
     lintCheck' (weakenLintCtx w ctx) t a
 
 lintInfer' :: forall ctx ctx'. LintCtx ctx ctx' -> Elim ctx -> Either String (VTerm ctx')
-lintInfer' ctx (Var x)   =
+lintInfer' ctx (Var x)   = do
     --
     --  (x : A) ∈ Γ
     -- ------------- var
     --   Γ ⊢ x ∈ A
     --
+
+    let s = lookupEnv x ctx.stages
+    when (s /= ctx.cstage) $ do
+        lintError ctx "Variable used at different stage"
+            [ "variable:" <+> prettyName (lookupEnv x ctx.names)
+            , "expected:" <+> prettyStage ctx.cstage
+            , "actual:  " <+> prettyStage s
+            ]
+
     return (lookupEnv x ctx.types)
 
 lintInfer' ctx (Gbl g)   =
@@ -451,6 +489,19 @@ lintInfer' ctx (Let x e f) = do
     a <- lintInfer ctx e
     let e' = evalElim ctx.size ctx.values e
     lintInfer (bind' ctx x e' a) f
+
+lintInfer' ctx (Spl e) = do
+    --
+    -- ⊢ e ∈ Code A
+    -- ---------------------- splice
+    -- ⊢ ~ e ∈ A
+    --
+    et <- lintInfer ctx { cstage = succ ctx.cstage } e
+    case force et of
+        VCod a -> return a
+        _ -> lintError ctx "Splice doesn't have type Code"
+            [ "actual:" <+> prettyVTermCtx ctx et
+            ]
 
 lintInfer' ctx (WkE w e) =
     lintInfer' (weakenLintCtx w ctx) e

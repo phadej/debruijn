@@ -8,6 +8,7 @@ module PoriTT.PP (
     ppSyArr,
     ppParens,
     ppParensIf,
+    ppQuote,
     pbraceSemi,
     pbraces,
     ppSep,
@@ -127,6 +128,9 @@ sgrCode' c = [ANSI.SetColor ANSI.Foreground ANSI.Vivid c]
 ppParensIf :: Bool -> Doc -> Doc
 ppParensIf True  = ppParens
 ppParensIf False = id
+
+ppQuote :: Doc -> Doc
+ppQuote = coerce (PP.brackets @A)
 
 ppParens :: Doc -> Doc
 ppParens = coerce (PP.parens @A)
