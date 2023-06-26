@@ -159,6 +159,7 @@ appP = srcP $ P.choice
     , tokenP TkMu      >> many atomP >>= mkMuu
     , tokenP TkCon     >> many atomP >>= mkCon
     , tokenP TkInd     >> many atomP >>= mkInd
+    , tokenP TkCode    >> many atomP >>= mkCod
     ]
   where
     mkPie :: [([Name], Raw)] -> Raw -> Raw
@@ -191,6 +192,10 @@ appP = srcP $ P.choice
     mkInd [e,m,c] = pure $ RInd e m c
     mkInd ts      = fail $ "ind expects three arguments, " ++ show (length ts) ++ " given"
 
+    mkCod :: [Raw] -> Parser Raw
+    mkCod [a] = pure $ RCod a
+    mkCod ts  = fail $ "Code expects one argument, " ++ show (length ts) ++ " given"
+
     branchesP :: Parser (Map Label Raw)
     branchesP = Map.fromList <$> P.sepBy branchP (tokenP TkSemi)
 
@@ -210,6 +215,8 @@ atomP = srcP $ P.choice
     , RFin . Set.fromList <$> between TkLBrace TkRBrace (many labelP)
     , mkLam <$ tokenP TkBackSlash <*> some nameOrHoleP <* tokenP TkArrow <*> rawP
     , RLet <$ tokenP TkLet <*> nameP <*> letDefP <* tokenP TkIn <*> rawP
+    , RQuo <$> between TkLBracket TkRBracket rawP
+    , RSpl <$ tokenP TkTilde <*> atomP
     ]
   where
     mkLam :: [Name] -> Raw -> Raw

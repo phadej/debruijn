@@ -49,6 +49,8 @@ quoteTerm _ _ VDsc          = pure Dsc
 quoteTerm _ _ VDe1          = pure De1
 quoteTerm _ _ (VLbl l)      = pure (Lbl l)
 quoteTerm _ _ (VFin ls)     = pure (Fin ls)
+quoteTerm u s (VCod t)      = Cod <$> quoteTerm u s t
+quoteTerm u s (VQuo t)      = Quo <$> quoteTerm u s t
 quoteTerm u s (VEmb e)      = emb <$> quoteElim u s e
 
 quoteElim :: Unfold -> Size ctx -> VElim ctx -> Either EvalError (Elim ctx)
@@ -71,6 +73,7 @@ quoteSpine u s h (VSel sp z)       = Sel <$> quoteSpine u s h sp <*> pure z
 quoteSpine u s h (VSwh sp m ts)    = Swh <$> quoteSpine u s h sp <*> quoteTerm u s m <*> traverse (quoteTerm u s) ts
 quoteSpine u s h (VDeI sp m x y z) = DeI <$> quoteSpine u s h sp <*> quoteTerm u s m <*> quoteTerm u s x <*> quoteTerm u s y <*> quoteTerm u s z
 quoteSpine u s h (VInd sp m t)     = Ind <$> quoteSpine u s h sp <*> quoteTerm u s m <*> quoteTerm u s t
+quoteSpine u s h (VSpl sp)         = Spl <$> quoteSpine u s h sp
 
 -------------------------------------------------------------------------------
 -- Normalisation

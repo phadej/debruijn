@@ -1,0 +1,34 @@
+define CU : Code U = [ U ]
+
+define U1 : U = ~CU
+define U2 : ~CU = ~CU
+
+define timely : forall (A : U) -> Code (A -> A)
+              = \ A -> [ \ x -> x ]
+
+define twice : forall (A : U) -> Code (A -> A) -> Code (A -> A)
+             = \A f -> [ \ x -> ~f (~f x)]
+
+define Bool : U = {:tt :ff}
+define true : Bool = :tt
+define false : Bool = :ff
+define if : Bool -> forall (A : U) -> A -> A -> A
+          = \ b A t f -> switch b (\ _ -> A) { :tt -> t ; :ff -> f }
+define not : Bool -> Bool
+           = \ b -> if b Bool false true
+
+define twiceid  = twice Bool [ \x -> not x ]
+define twiceid! = ~twiceid
+
+define Id : forall (A : U) (x y : A) -> U
+          = \ A x y -> forall (C : A -> U) -> C x -> C y
+
+define refl : forall (A : U) (x : A) -> Id A x x
+            = \ A x C Cx -> Cx
+
+define test : Id (Code Bool) [ true ] [ true ]
+            = refl (Code Bool) [ true ]
+
+-- should this work or not?
+define test2 : Id (Code Bool) [ true ] [ not false ]
+             = refl (Code Bool) [ true ]

@@ -30,6 +30,8 @@ data Term ctx where
     DeX :: Term ctx -> Term ctx
     Muu :: Term ctx -> Term ctx
     Con :: Term ctx -> Term ctx
+    Cod :: Term ctx -> Term ctx
+    Quo :: Term ctx -> Term ctx
     Emb :: Elim ctx -> Term ctx
     WkT :: Wk ctx ctx' -> Term ctx -> Term ctx'
 
@@ -43,6 +45,7 @@ data Elim ctx where
     Swh :: Elim ctx -> Term ctx -> Map Label (Term ctx) -> Elim ctx
     DeI :: Elim ctx -> Term ctx -> Term ctx -> Term ctx -> Term ctx -> Elim ctx
     Ind :: Elim ctx -> Term ctx -> Term ctx -> Elim ctx
+    Spl :: Elim ctx -> Elim ctx
     Ann :: Term ctx -> Term ctx -> Elim ctx
     Let :: Name -> Elim ctx -> Elim (S ctx) -> Elim ctx
     WkE :: Wk ctx ctx' -> Elim ctx -> Elim ctx'
@@ -101,6 +104,8 @@ instance RenamableA Term where
     grename _ (Fin ls)    = pure (Fin ls)
     grename r (Muu d)     = Muu <$> grename r d
     grename r (Con t)     = Con <$> grename r t
+    grename r (Cod t)     = Cod <$> grename r t
+    grename r (Quo t)     = Quo <$> grename r t
     grename r (WkT w t)   = grename (weakenIdxMapping w r) t
 
 instance RenamableA Elim where
@@ -113,6 +118,7 @@ instance RenamableA Elim where
     grename r (DeI d m x y z) = DeI <$> grename r d <*> grename r m <*> grename r x <*> grename r y <*> grename r z
     grename r (Let x t s)     = Let x <$> grename r t <*> grename (keep r) s
     grename r (Ind e m c)     = Ind <$> grename r e <*> grename r m <*> grename r c
+    grename r (Spl e)         = Spl <$> grename r e
     grename r (WkE w e)       = grename (weakenIdxMapping w r) e
 
 -------------------------------------------------------------------------------
@@ -164,6 +170,8 @@ instance ToRaw Term where
     toRaw ns env (DeX t)   = RDeX (toRaw ns env t)
     toRaw ns env (Muu d)   = RMuu (toRaw ns env d)
     toRaw ns env (Con t)   = RCon (toRaw ns env t)
+    toRaw ns env (Cod a)   = RCod (toRaw ns env a)
+    toRaw ns env (Quo t)   = RQuo (toRaw ns env t)
     toRaw ns env (Emb e)   = toRaw ns env e
     toRaw _  _   (Lbl l)   = RLbl l
     toRaw _  _   (Fin ls)  = RFin ls
@@ -181,5 +189,6 @@ instance ToRaw Elim where
     toRaw ns env (Sel e s)       = rsel (toRaw ns env e) s
     toRaw ns env (DeI e m x y z) = RDeI (toRaw ns env e) (toRaw ns env m) (toRaw ns env x) (toRaw ns env y) (toRaw ns env z)
     toRaw ns env (Ind e m c)     = RInd (toRaw ns env e) (toRaw ns env m) (toRaw ns env c)
+    toRaw ns env (Spl e)         = RSpl (toRaw ns env e)
     toRaw ns env (Ann t s)       = RAnn (toRaw ns env t) (toRaw ns env s)
     toRaw ns env (WkE w e)       = toRaw ns (weakenEnv w env) e

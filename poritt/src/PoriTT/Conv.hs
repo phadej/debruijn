@@ -108,6 +108,7 @@ convTerm' ctx VUni (VSgm x a1 b1) (VSgm _ a2 b2) = convTerm ctx VUni a1 a2 >> co
 convTerm' ctx VUni (VMuu x)       (VMuu y)       = convTerm ctx VDsc x y
 convTerm' ctx VUni (VEmb (VNeu x sp1)) (VEmb (VNeu y sp2))   = convNeutral ctx x sp1 y sp2
 convTerm' _   VUni (VFin ls1)     (VFin ls2)     = if ls1 == ls2 then pure () else mismatch "finite set" (prettyLabels ls1) (prettyLabels ls2)
+convTerm' ctx VUni (VCod x)       (VCod y)       = convTerm ctx VUni x y
 convTerm' ctx VUni x              y              = notConvertible ctx VUni x y
 
 -- ⊢ Π (x : A) → B ∋ t ≡ s
@@ -154,6 +155,12 @@ convTerm' ctx (VMuu d) (VCon x)       (VCon y)     = do
 convTerm' ctx (VMuu _) (VEmb x)       (VEmb y)     = convElim ctx x y
 convTerm' ctx (VMuu d) x              y            = notConvertible ctx (VMuu d) x y
 
+-- ⊢ Code a ∋ t ≡ s
+convTerm' ctx (VCod a) (VQuo x)       (VQuo y)     = do
+    convTerm ctx a x y
+convTerm' ctx (VCod _) (VEmb x)       (VEmb y)     = convElim ctx x y
+convTerm' ctx (VCod a) x              y            = notConvertible ctx (VCod a) x y
+
 -- Only neutral terms can be convertible under neutral type
 convTerm' ctx (VEmb VNeu {})     (VEmb x) (VEmb y) = convElim ctx x y
 convTerm' ctx (VEmb (VNeu h sp)) x y = notConvertible ctx (VEmb (VNeu h sp)) x y
@@ -168,6 +175,7 @@ convTerm' ctx ty@VDeX {} _ _ = notType ctx ty
 convTerm' ctx ty@VCon {} _ _ = notType ctx ty
 convTerm' ctx ty@VMul {} _ _ = notType ctx ty
 convTerm' ctx ty@VLbl {} _ _ = notType ctx ty
+convTerm' ctx ty@VQuo {} _ _ = notType ctx ty
 
 convElim' :: ConvCtx ctx -> VElim ctx -> VElim ctx -> Either Doc ()
 -- Globals
@@ -217,18 +225,18 @@ convSpine ctx headLvl sp1' sp2' = do
     fwd (sp, (VEmb (VGbl _ _ t))) x           y =
         fwd (sp, vemb t) x y
 
-    fwd (sp, VPie _ a b) (SApp x)    (SApp y) = do
+    fwd (sp, VPie _ a b) (PApp x)    (PApp y) = do
         convTerm ctx a x y
         return (vapp ctx.size sp x, run ctx.size b (vann x a))
 
-    fwd (sp, VSgm _ a b) (SSel x)    (SSel y)
+    fwd (sp, VSgm _ a b) (PSel x)    (PSel y)
         | x == y = case x of
             "fst" -> return (vsel ctx.size sp x, a)
             "snd" -> return (vsel ctx.size sp x, run ctx.size b (vsel ctx.size sp "fst"))
             _     -> Left $ "conv panic: sigma with" <+> prettySelector x
         | otherwise                            = mismatch "selector" (prettySelector x) (prettySelector y)
 
-    fwd (sp, VFin ls)    (SSwh m1 xs) (SSwh m2 ys)
+    fwd (sp, VFin ls)    (PSwh m1 xs) (PSwh m2 ys)
         | xs' /= ys'                           = mismatch "switch case labels" (prettyLabels xs') (prettyLabels ys')
         | otherwise                            = do
             convTerm ctx (VPie "_" (VFin ls) (Closure EmptyEnv Uni)) m1 m2
@@ -240,8 +248,8 @@ convSpine ctx headLvl sp1' sp2' = do
         xs' = Map.keysSet xs
         ys' = Map.keysSet ys
 
-    fwd (sp, VDsc)   (SDeI m1 t1 s1 r1)
-                     (SDeI m2 t2 s2 r2)        = do
+    fwd (sp, VDsc)   (PDeI m1 t1 s1 r1)
+                     (PDeI m2 t2 s2 r2)        = do
         convTerm ctx (evalTerm ctx.size EmptyEnv         descIndMotive)  m1 m2
         let m :: VElim ctx
             m = vann m1 $ varr VDsc Uni
@@ -250,7 +258,7 @@ convSpine ctx headLvl sp1' sp2' = do
         convTerm ctx (evalTerm ctx.size (EmptyEnv :> m) descIndMotiveX) r1 r2
         return (vdei ctx.size sp m1 t1 s1 r1, vemb (vapp ctx.size m (vemb sp)))
 
-    fwd (sp, VMuu d)     (SInd m1 c1) (SInd m2 c2) = do
+    fwd (sp, VMuu d)     (PInd m1 c1) (PInd m2 c2) = do
         convTerm ctx (VPie "_" (VMuu d) (Closure EmptyEnv Uni))      m1 m2
         let m :: VElim ctx
             m = vann m1 $ varr (VMuu d) Uni
@@ -270,12 +278,12 @@ foldParts f a ((x,y):zs) = f a x y >>= \b -> foldParts f b zs
 
 unsnocSpine :: Spine ctx -> Maybe (Spine ctx, SpinePart ctx)
 unsnocSpine VNil                 = Nothing
-unsnocSpine (VApp sp x)          = Just (sp, SApp x)
-unsnocSpine (VSel sp x)          = Just (sp, SSel x)
-unsnocSpine (VSwh sp m ts)       = Just (sp, SSwh m ts)
-unsnocSpine (VDeI sp m c1 c2 c3) = Just (sp, SDeI m c1 c2 c3)
-unsnocSpine (VInd sp m c)        = Just (sp, SInd m c)
-
+unsnocSpine (VApp sp x)          = Just (sp, PApp x)
+unsnocSpine (VSel sp x)          = Just (sp, PSel x)
+unsnocSpine (VSwh sp m ts)       = Just (sp, PSwh m ts)
+unsnocSpine (VDeI sp m c1 c2 c3) = Just (sp, PDeI m c1 c2 c3)
+unsnocSpine (VInd sp m c)        = Just (sp, PInd m c)
+unsnocSpine (VSpl sp)            = Just (sp, PSpl)
 {-
 snocSpine :: Spine ctx -> SpinePart ctx -> Spine ctx
 snocSpine sp (SApp x)          = VApp sp x
@@ -293,19 +301,22 @@ spineLength = go 0 where
     go !n (VSwh sp _ _)     = go (n + 1) sp
     go !n (VDeI sp _ _ _ _) = go (n + 1) sp
     go !n (VInd sp _ _)     = go (n + 1) sp
+    go !n (VSpl sp)         = go (n + 1) sp
 
 -- /Verterbrae/
 data SpinePart ctx
-    = SApp (VTerm ctx)
-    | SSel !Selector
-    | SSwh (VTerm ctx) (Map Label (VTerm ctx))
-    | SDeI (VTerm ctx) (VTerm ctx) (VTerm ctx) (VTerm ctx)
-    | SInd (VTerm ctx) (VTerm ctx)
+    = PApp (VTerm ctx)
+    | PSel !Selector
+    | PSwh (VTerm ctx) (Map Label (VTerm ctx))
+    | PDeI (VTerm ctx) (VTerm ctx) (VTerm ctx) (VTerm ctx)
+    | PInd (VTerm ctx) (VTerm ctx)
+    | PSpl
   deriving Show
 
 prettySpinePart :: ConvCtx ctx -> SpinePart ctx -> Doc
-prettySpinePart ctx (SApp v)       = "application" <+> prettyVTermCtx ctx v
-prettySpinePart _   (SSel s)       = "selector" <+> prettySelector s
-prettySpinePart _   (SSwh _ _)     = "switch"
-prettySpinePart _   (SDeI _ _ _ _) = "indDesc"
-prettySpinePart _   (SInd _ _)     = "ind"
+prettySpinePart ctx (PApp v)       = "application" <+> prettyVTermCtx ctx v
+prettySpinePart _   (PSel s)       = "selector" <+> prettySelector s
+prettySpinePart _   (PSwh _ _)     = "switch"
+prettySpinePart _   (PDeI _ _ _ _) = "indDesc"
+prettySpinePart _   (PInd _ _)     = "ind"
+prettySpinePart _   PSpl           = "splice"

@@ -7,8 +7,7 @@ import PoriTT.Base
 import PoriTT.Name
 import PoriTT.PP
 import PoriTT.Term
-
-import {-# SOURCE #-} PoriTT.Eval (VElim, VTerm)
+import PoriTT.Value (VElim, VTerm)
 
 data Global = Global
     { gblName   :: !Name
