@@ -21,7 +21,7 @@ syn match mttSelector "\.[a-z][a-zA-Z0-9_']*\>"
 syn match mttDelimiter  "(\|)\|\[\|\]\|;\|_\|{\|}"
 
 " Keyword definitions.
-syn keyword mttStmt    define eval type info inline macro
+syn keyword mttStmt    define eval type info inline macro include section
 syn keyword mttType    forall -> exists * U mu Desc
 syn keyword mttKeyword let in switch ind con `1 `S `X indDesc
 

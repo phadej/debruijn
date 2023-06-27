@@ -1,9 +1,11 @@
 define id : forall (A : U) -> A -> A = \ _ x -> x
 defined id : forall (A : U) -> A -> A = \ _ x -> x
+
 info id
 defined id
   : forall (A : U) -> A -> A
   = \ _ x -> x
+
 info nat
 Error: nat is unknown
 ExitFailure

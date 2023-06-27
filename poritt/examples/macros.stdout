@@ -1,9 +1,15 @@
-macro $apply = f t
-macro $apply f t
+macro %apply = f t
+macro %apply f t
   = f t
-info $apply
-macro $apply f t
+
+info %apply
+macro %apply f t
   = f t
+
 define id : forall (A : U) -> A -> A = \ _ x -> x
 defined id : forall (A : U) -> A -> A = \ _ x -> x
-eval $apply id {:tt} :tt = :tt : {:tt}
+
+eval %apply id {:tt} :tt = :tt : {:tt}
+
+end-of-file "examples/macros.ptt"
+

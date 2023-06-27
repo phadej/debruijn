@@ -44,7 +44,7 @@ mkName :: Text -> Name
 mkName t = Name (ST.fromText t)
 
 prettyName :: Name -> Doc
-prettyName (Name t) = ppText (ST.unpack t)
+prettyName (Name t) = ppStr (ST.unpack t)
 
 -- | Special name
 holeName :: Name

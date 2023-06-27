@@ -4,6 +4,7 @@ define Id
 defined Id
   : forall (A : U) -> A -> A -> U
   = \ A x y -> forall (C : A -> U) -> C x -> C y
+
 Error: examples/errors/error-conv-01.ptt:5:16: Couldn't match types
   * expected: C :y
   * actual: C :x

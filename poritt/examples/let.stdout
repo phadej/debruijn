@@ -2,3 +2,6 @@ define id = let i = (\ _ x -> x) : forall (A : U) -> A -> A in i
 defined id
   : forall (A : U) -> A -> A
   = let i = (\ _ x -> x) : forall (A : U) -> A -> A in i
+
+end-of-file "examples/let.ptt"
+

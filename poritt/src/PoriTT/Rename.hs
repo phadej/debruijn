@@ -124,6 +124,12 @@ resolve' ctx (RApp (unRLoc -> RVar a) bs)
     = validateBind (traverse (traverse (resolve' ctx)) bs) $ \bs' ->
       expandMacro ctx ns bs' $ \ws cs ->
       pure $ wApps (subst (MkSub ws) w) cs
+resolve' ctx (RApp (unRLoc -> RLbl l) bs) = case sequenceA bs of
+    Right bs' -> WLbl l <$> traverse (resolve' ctx) bs'
+    Left s    -> renameError ctx
+        ("Selector" <+> prettySelector s <+> "applied to label" <+> prettyLabel l)
+        []
+
 resolve' ctx (RApp a bs) = do
     wApps <$> resolve' ctx a <*> traverse (traverse (resolve' ctx)) bs
 resolve' ctx (RAnn t s) =
@@ -157,7 +163,7 @@ resolve' _   RHol = pure WHol
 resolve' _   RUni = pure WUni
 resolve' _   RDsc = pure WDsc
 resolve' _   RDe1 = pure WDe1
-resolve' _   (RLbl l) = pure (WLbl l)
+resolve' _   (RLbl l) = pure (WLbl l [])
 resolve' _   (RFin ls) = pure (WFin ls)
 
 

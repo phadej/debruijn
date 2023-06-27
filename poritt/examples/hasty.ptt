@@ -1,2 +1,2 @@
 define hasty : forall (A : U) -> Code A -> A
-             = \A x -> ~x
+             = \A x -> $x

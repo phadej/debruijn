@@ -1,44 +1,113 @@
-define CU : Code U = [U]
-defined CU : Code U = [U]
-define U1 : U = ~CU
-defined U1 : U = ~CU
-define U2 : ~CU = ~CU
-defined U2 : ~CU = ~CU
-define timely : forall (A : U) -> Code (A -> A) = \ A -> [\ x -> x]
-defined timely : forall (A : U) -> Code (A -> A) = \ A -> [\ x -> x]
-define twice
-  : forall (A : U) -> Code (A -> A) -> Code (A -> A)
-  = \ A f -> [\ x -> ~f (~f x)]
-defined twice
-  : forall (A : U) -> Code (A -> A) -> Code (A -> A)
-  = \ A f -> [\ x -> ~f (~f x)]
-define Bool : U = {:ff :tt}
-defined Bool : U = {:ff :tt}
-define true : Bool = :tt
-defined true : Bool = :tt
-define false : Bool = :ff
-defined false : Bool = :ff
+include "lib/bool.ptt"
+
+define Bool : U = {:false :true}
+defined Bool : U = {:false :true}
+
+define true : Bool = :true
+defined true : Bool = :true
+
+define false : Bool = :false
+defined false : Bool = :false
+
 define if
   : Bool -> forall (A : U) -> A -> A -> A
-  = \ b A t f -> switch b (\ _ -> A) {:ff -> f; :tt -> t}
+  = \ b A t f -> switch b (\ _ -> A) {:false -> f; :true -> t}
 defined if
   : Bool -> forall (A : U) -> A -> A -> A
-  = \ b A t f -> switch b (\ _ -> A) {:ff -> f; :tt -> t}
+  = \ b A t f -> switch b (\ _ -> A) {:false -> f; :true -> t}
+
 define not : Bool -> Bool = \ b -> if b Bool false true
 defined not : Bool -> Bool = \ b -> if b Bool false true
-define twiceid = twice Bool [\ x -> not x]
-defined twiceid : Code (Bool -> Bool) = twice Bool [\ x -> not x]
-define twiceid! = ~twiceid
-defined twiceid! : Bool -> Bool = ~twiceid
+
+define and
+  : Bool -> Bool -> Bool
+  = \ x y -> switch x (\ _ -> Bool) {:false -> :false; :true -> y}
+defined and
+  : Bool -> Bool -> Bool
+  = \ x y -> switch x (\ _ -> Bool) {:false -> :false; :true -> y}
+
+define or
+  : Bool -> Bool -> Bool
+  = \ x y -> switch x (\ _ -> Bool) {:false -> y; :true -> :true}
+defined or
+  : Bool -> Bool -> Bool
+  = \ x y -> switch x (\ _ -> Bool) {:false -> y; :true -> :true}
+
+end-of-file "examples/lib/bool.ptt"
+
+include "lib/leibniz.ptt"
+
 define Id
   : forall (A : U) (x : A) (y : A) -> U
   = \ A x y -> forall (C : A -> U) -> C x -> C y
 defined Id
   : forall (A : U) -> A -> A -> U
   = \ A x y -> forall (C : A -> U) -> C x -> C y
+
 define refl : forall (A : U) (x : A) -> Id A x x = \ A x C Cx -> Cx
 defined refl : forall (A : U) (x : A) -> Id A x x = \ A x C Cx -> Cx
-define test : Id (Code Bool) [true] [true] = refl (Code Bool) [true]
-defined test : Id (Code Bool) [true] [true] = refl (Code Bool) [true]
-define test2 : Id (Code Bool) [true] [not false] = refl (Code Bool) [true]
-defined test2 : Id (Code Bool) [true] [not false] = refl (Code Bool) [true]
+
+macro %refl = \ _ Cx -> Cx
+macro %refl 
+  = \ _ Cx -> Cx
+
+define sym
+  : forall (A : U) (x : A) (y : A) -> Id A x y -> Id A y x
+  = \ A x y x=y -> x=y (\ z -> Id A z x) (refl A x)
+defined sym
+  : forall (A : U) (x : A) (y : A) -> Id A x y -> Id A y x
+  = \ A x y x=y -> x=y (\ z -> Id A z x) (refl A x)
+
+define trans
+  : forall (A : U) (x : A) (y : A) (z : A) -> Id A x y -> Id A y z -> Id A x z
+  = \ A x y z x=y y=z -> y=z (\ v -> Id A x v) x=y
+defined trans
+  : forall (A : U) (x : A) (y : A) (z : A) -> Id A x y -> Id A y z -> Id A x z
+  = \ A x y z x=y y=z -> y=z (\ v -> Id A x v) x=y
+
+end-of-file "examples/lib/leibniz.ptt"
+
+define CU : Code U = [| U |]
+defined CU : Code U = [| U |]
+
+define U1 : U = $CU
+defined U1 : U = U
+
+define U2 : $CU = $CU
+defined U2 : $CU = U
+
+define timely : forall (A : U) -> Code (A -> A) = \ A -> [| \ x -> x |]
+defined timely : forall (A : U) -> Code (A -> A) = \ A -> [| \ x -> x |]
+
+define twice
+  : forall (A : U) -> (Code A -> Code A) -> Code (A -> A)
+  = \ A f -> [| \ x -> $(f (f [| x |])) |]
+defined twice
+  : forall (A : U) -> (Code A -> Code A) -> Code (A -> A)
+  = \ A f -> [| \ x -> $(f (f [| x |])) |]
+
+define twiceid = twice Bool (\ x -> [| not $x |])
+defined twiceid : Code (Bool -> Bool) = twice Bool (\ x -> [| not $x |])
+
+define twiceid1 = $twiceid
+defined twiceid1 : Bool -> Bool = \ x -> not (not x)
+
+define twiceid2 = $(twice Bool (\ x -> [| not $x |]))
+defined twiceid2 : Bool -> Bool = \ x -> not (not x)
+
+type %refl : Id (Code Bool) [| true |] [| true |]
+  : Id (Code Bool) [| true |] [| true |]
+
+Error: examples/staging.ptt:24:5: Couldn't match types
+  * expected: C [| not false |]
+  * actual: C [| true |]
+  * TODO: convSElim not convertible
+  * When checking that Cx has type C [| not false |]
+  * When checking that \ Cx -> Cx has type C [| true |] -> C [| not false |]
+  * When checking that \ _ Cx -> Cx has type Id
+                                               (Code Bool)
+                                               [| true |]
+                                               [| not false |]
+  * When infering type of (\ _ Cx -> Cx)
+                            : Id (Code Bool) [| true |] [| not false |]
+ExitFailure

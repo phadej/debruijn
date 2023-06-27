@@ -1,39 +1,55 @@
 define Nat : U = forall (r : U) -> forall (s : r -> r) -> forall (z : r) -> r
 defined Nat : U = forall (r : U) -> (r -> r) -> r -> r
+
 define zero : Nat = \ _ _ z -> z
 defined zero : Nat = \ _ _ z -> z
+
 define succ : Nat -> Nat = \ n A s z -> n A s (s z)
 defined succ : Nat -> Nat = \ n A s z -> n A s (s z)
+
 info Nat
 defined Nat
   : U
   = forall (r : U) -> (r -> r) -> r -> r
+
 type succ (succ zero)
   : Nat
+
 define two = succ (succ zero)
 defined two : Nat = succ (succ zero)
+
 type two
   : Nat
+
 eval two = \ A s z -> s (s z) : Nat
+
 define natInd
   : forall (A : U) -> (A -> A) -> A -> Nat -> A
   = \ A s z n -> n A s z
 defined natInd
   : forall (A : U) -> (A -> A) -> A -> Nat -> A
   = \ A s z n -> n A s z
+
 define plus : Nat -> Nat -> Nat = \ n m -> natInd Nat succ m n
 defined plus : Nat -> Nat -> Nat = \ n m -> natInd Nat succ m n
+
 eval plus two two = \ A s z -> s (s (s (s z))) : Nat
+
 define mult : Nat -> Nat -> Nat = \ n m -> natInd Nat (plus m) zero n
 defined mult : Nat -> Nat -> Nat = \ n m -> natInd Nat (plus m) zero n
+
 eval mult two (succ two) = \ A s z -> s (s (s (s (s (s z))))) : Nat
+
 eval mult (succ two) two = \ A s z -> s (s (s (s (s (s z))))) : Nat
+
 eval (\ n -> mult n (succ two)) : Nat -> Nat
   = \ n -> n Nat (plus (succ two)) zero
   : Nat -> Nat
+
 eval (\ n -> mult (succ two) n) : Nat -> Nat
   = \ n -> n Nat succ (plus n (plus n zero))
   : Nat -> Nat
+
 Error: examples/church-nat.ptt:31:10: Checking a hole
   * type: Nat
   * When checking that _ has type Nat

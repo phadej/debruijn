@@ -20,6 +20,7 @@ import PoriTT.PP
 import PoriTT.Quote
 import PoriTT.Term
 import PoriTT.Used
+import PoriTT.Value
 
 -- | Conversion context.
 data ConvCtx ctx = ConvCtx
@@ -156,8 +157,8 @@ convTerm' ctx (VMuu _) (VEmb x)       (VEmb y)     = convElim ctx x y
 convTerm' ctx (VMuu d) x              y            = notConvertible ctx (VMuu d) x y
 
 -- ⊢ Code a ∋ t ≡ s
-convTerm' ctx (VCod a) (VQuo x)       (VQuo y)     = do
-    convTerm ctx a x y
+convTerm' ctx (VCod a) (VQuo x _)     (VQuo y _)   = do
+    convSTerm ctx a x y
 convTerm' ctx (VCod _) (VEmb x)       (VEmb y)     = convElim ctx x y
 convTerm' ctx (VCod a) x              y            = notConvertible ctx (VCod a) x y
 
@@ -165,7 +166,7 @@ convTerm' ctx (VCod a) x              y            = notConvertible ctx (VCod a)
 convTerm' ctx (VEmb VNeu {})     (VEmb x) (VEmb y) = convElim ctx x y
 convTerm' ctx (VEmb (VNeu h sp)) x y = notConvertible ctx (VEmb (VNeu h sp)) x y
 
-convTerm' _   (VEmb (VErr msg)) _ _ = Left $ ppText $ show msg
+convTerm' _   (VEmb (VErr msg)) _ _ = Left $ ppStr $ show msg
 
 -- value constructors cannot be types
 convTerm' ctx ty@VLam {} _ _ = notType ctx ty
@@ -187,8 +188,8 @@ convElim' ctx t              (VGbl _ _ u)  = convElim ctx t u
 convElim' ctx (VNeu h1 sp1)  (VNeu h2 sp2) = convNeutral ctx h1 sp1 h2 sp2
 convElim' ctx (VAnn t ty)    e             = convTerm ctx ty t (vemb e)
 convElim' ctx e              (VAnn t ty)   = convTerm ctx ty (vemb e) t
-convElim' _   (VErr msg)     _             = Left $ ppText $ show msg
-convElim' _   _              (VErr msg)    = Left $ ppText $ show msg
+convElim' _   (VErr msg)     _             = Left $ ppStr $ show msg
+convElim' _   _              (VErr msg)    = Left $ ppStr $ show msg
 
 -- Eta expand value of function type.
 etaLam :: Size ctx -> VElim ctx -> VTerm (S ctx)
@@ -320,3 +321,13 @@ prettySpinePart _   (PSwh _ _)     = "switch"
 prettySpinePart _   (PDeI _ _ _ _) = "indDesc"
 prettySpinePart _   (PInd _ _)     = "ind"
 prettySpinePart _   PSpl           = "splice"
+
+convSTerm :: ConvCtx ctx -> VTerm ctx -> STerm ctx -> STerm ctx -> Either Doc ()
+convSTerm env ty (SEmb x) (SEmb y) = convSElim env ty x y
+convSTerm _ _ _ _ = Left $ "convSTerm not convertible"
+
+convSElim :: ConvCtx ctx -> VTerm ctx -> SElim ctx -> SElim ctx -> Either Doc ()
+convSElim _ _ (SGbl x) (SGbl y)
+  | gblName x == gblName y
+  = return ()
+convSElim _env _ty _ _ = Left "TODO: convSElim not convertible"

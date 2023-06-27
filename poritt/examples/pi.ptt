@@ -1,0 +1,13 @@
+-- Pi type
+define pi : forall (A : U) (B : A -> U) -> U = \ A B -> forall (x : A) -> B x
+
+-- Pi induction
+--
+define indPi
+  : forall (A : U)
+           (B : A -> U)
+           (e : pi A B)
+           (M : pi A B -> U)
+           (m : forall (y : forall (x : A) -> B x) -> M (\x -> y x))
+        -> M e
+  = \ A B e M m -> m e

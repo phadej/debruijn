@@ -25,6 +25,7 @@ import PoriTT.Quote
 import PoriTT.Stage
 import PoriTT.Term
 import PoriTT.Used
+import PoriTT.Value
 import PoriTT.Well
 
 -------------------------------------------------------------------------------
@@ -107,7 +108,7 @@ prettyNamesTypes s ns env (xs :> x) (ts :> t) =
     prettyNamesTypes s ns env xs ts
   where
     t' = case quoteTerm UnfoldElim s t of
-        Left err -> ppText (show err) -- This shouldn't happen if type-checker is correct.
+        Left err -> ppStr (show err) -- This shouldn't happen if type-checker is correct.
         Right n  -> prettyTerm ns env 0 n
 
 -------------------------------------------------------------------------------
@@ -146,7 +147,7 @@ check' ctx (WLoc l t)   a =
     check' ctx { loc = l } t a
 check' ctx _            (force -> VEmb (VErr msg)) = do
     elabError ctx "Type evaluation error"
-        [ ppText (show msg)
+        [ ppStr (show msg)
         ]
 
 check' ctx (WLam x t)   (force -> VPie y a b) = do
@@ -191,14 +192,31 @@ check' ctx (WFin _) ty =
     elabError ctx "finite set type should have type U"
         [ "actual:" <+> prettyVTermCtx ctx ty
         ]
-check' ctx (WLbl l) (force -> VFin ls)
+check' ctx (WLbl l ts) (force -> VFin ls)
+    | not (null ts)
+    = elabError ctx ("label" <+> prettyLabel l <+> "is applied to arguments but checked against finite set type") []
+
     | Set.member l ls
     = return (Lbl l)
 
     | otherwise
     = elabError ctx ("label" <+> prettyLabel l <+> "is not in the set" <+> prettyVTermCtx ctx (VFin ls)) []
 
-check' ctx (WLbl _) ty =
+check' ctx (WLbl l ts) (force -> VMuu (force -> VDeS (force -> VFin ls) d))
+    | Set.notMember l ls
+    = elabError ctx ("label" <+> prettyLabel l <+> "is not in the set" <+> prettyVTermCtx ctx (VFin ls)) []
+
+    | otherwise
+    = do
+        let d' = vann d $ (VPie "_" (VFin ls) (Closure EmptyEnv Dsc))
+        t' <- check ctx (wList ts) $ vemb $ vapps ctx.size (vgbl ctx.size evalDescGlobal)
+            [ vemb (vapp ctx.size d' (VLbl l))
+            , VMuu (VDeS (VFin ls) d)
+            ]
+
+        return $ Con (Mul (Lbl l) t')
+
+check' ctx (WLbl _ _) ty =
     elabError ctx "label should have finite set type"
         [ "actual:" <+> prettyVTermCtx ctx ty
         ]
@@ -259,7 +277,7 @@ check' ctx (WCod _)     ty =
     elabError ctx "Code should have type U"
         [ "actual:" <+> prettyVTermCtx ctx ty
         ]
-    
+
 check' ctx (WQuo t)     (force -> VCod a) = do
     t' <- check ctx { cstage = pred ctx.cstage } t a
     return (Quo t')
@@ -316,7 +334,7 @@ infer' ctx (WCon _) =
     elabError ctx
     "Cannot infer type of a con constructor"
     []
-infer' ctx (WLbl _) =
+infer' ctx (WLbl _ _) =
     elabError ctx
     "Cannot infer type of a label"
     []
@@ -443,7 +461,7 @@ infer' ctx (WInd e m t) = do
     case force et of
         VMuu d -> do
             -- ⊢ μ D → U ∋ M
-            let mt = VPie "_" et (Closure ctx.values Uni)
+            let mt = VPie "_" et (Closure EmptyEnv Uni)
             m' <- check ctx m mt
             let mv :: VElim ctx'
                 mv = vann (evalTerm ctx.size ctx.values m') mt
@@ -470,7 +488,7 @@ infer' ctx (WSpl e) = do
 
         _ -> elabError ctx "splice argument doesn't have type Code"
             [ "actual:" <+> prettyVTermCtx ctx et
-            ]        
+            ]
 
 infer' ctx (WAnn t s) = do
     s' <- check ctx s VUni
@@ -482,3 +500,6 @@ infer' ctx (WLet x t s) = do
     let tv = evalElim (size ctx) (values ctx) t'
     (s', st) <- infer (bind' ctx x tv tt) s
     return (Let x t' s', st)
+
+wList :: [Well ctx] -> Well ctx
+wList = foldr WMul (WLbl (mkLabel "tt") [])

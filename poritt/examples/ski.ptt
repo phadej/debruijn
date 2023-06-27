@@ -1,0 +1,21 @@
+-- identity function
+define I : forall (A : U) -> A -> A = \ _ x -> x
+
+type I
+
+-- constant function
+define K : forall (A B : U) -> A -> B -> A = \ _ _ x _ -> x
+
+eval K
+
+-- reader ap
+define S : forall (A B C : U) -> (A -> B -> C) -> (A -> B) -> (A -> C) = \ _ _ _ x y z -> x z (y z)
+
+-- I can be define alternatively, e.g.
+define I2
+  : forall (A : U) -> A -> A
+  = \A -> S A (A -> A) A (K A (A -> A)) (K A A)
+
+include "lib/leibniz.ptt"
+
+type %refl : Id (forall (A : U) -> A -> A) I I2

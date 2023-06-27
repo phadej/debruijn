@@ -1,4 +1,4 @@
 Error: "examples/errors/error-parse.ptt" (line 1, column 12):
 unexpected end of input
-expecting identifier, label, U, Desc, `1, _, (, {, \, let, [, ~, forall, exists, switch, `S, `X, indDesc, mu, con, ind or Code
+expecting identifier, label, U, Desc, `1, _, (, {, \, let, [|, $, forall, exists, switch, `S, `X, indDesc, mu, con, ind or Code
 ExitFailure

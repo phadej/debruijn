@@ -1,18 +1,26 @@
 define id : forall (A : U) -> A -> A = \ _ x -> x
 defined id : forall (A : U) -> A -> A = \ _ x -> x
+
 eval id (forall (B : U) -> B -> B) id = \ _ x -> x : forall (B : U) -> B -> B
+
 define typeInType : U = U
 defined typeInType : U = U
+
 define somethingElse : (U : U) -> U = \ x -> x
 defined somethingElse : U -> U = \ x -> x
+
 define the : forall (A : U) -> A -> A = \ _ x -> x
 defined the : forall (A : U) -> A -> A = \ _ x -> x
+
 define Pointed : U = exists (A : U) * A
 defined Pointed : U = exists (A : U) * A
+
 define Pair : U -> U -> U = \ A B -> A * B
 defined Pair : U -> U -> U = \ A B -> A * B
+
 define fst : forall (A : U) (B : U) -> A * B -> A = \ _ _ p -> p .fst
 defined fst : forall (A : U) (B : U) -> A * B -> A = \ _ _ p -> p .fst
+
 define indExists
   : forall
       (A : U)
@@ -30,48 +38,68 @@ defined indExists
       (M : exists (x : A) * B x -> U) ->
       (forall (x : A) (y : B x) -> M (x , y)) -> M e
   = \ A B e M m -> m (e .fst) (e .snd)
+
 define Unit : U = {:tt}
 defined Unit : U = {:tt}
+
 define tt : Unit = :tt
 defined tt : Unit = :tt
+
 define Bool : U = {:false :true}
 defined Bool : U = {:false :true}
+
 define true : Bool = :true
 defined true : Bool = :true
+
 define false : Bool = :false
 defined false : Bool = :false
+
 define ifte
   : Bool -> forall (A : U) -> A -> A -> A
   = \ b A t f -> switch b (\ _ -> A) {:false -> f; :true -> t}
 defined ifte
   : Bool -> forall (A : U) -> A -> A -> A
   = \ b A t f -> switch b (\ _ -> A) {:false -> f; :true -> t}
+
 define Empty : U = {}
 defined Empty : U = {}
+
 define absurd : Empty -> forall (A : U) -> A = \ x A -> switch x (\ _ -> A) {}
 defined absurd : Empty -> forall (A : U) -> A = \ x A -> switch x (\ _ -> A) {}
+
 define NatC : U = {:succ :zero}
 defined NatC : U = {:succ :zero}
+
 define NatF
   : NatC -> Desc
   = \ c -> switch c (\ _ -> Desc) {:succ -> `X `1; :zero -> `1}
 defined NatF
   : NatC -> Desc
   = \ c -> switch c (\ _ -> Desc) {:succ -> `X `1; :zero -> `1}
+
 define NatD : Desc = `S NatC NatF
 defined NatD : Desc = `S NatC NatF
+
 define Nat : U = mu NatD
 defined Nat : U = mu NatD
+
 define zero : Nat = con (:zero , :tt)
 defined zero : Nat = con (:zero , :tt)
+
 define succ : Nat -> Nat = \ n -> con (:succ , n , :tt)
 defined succ : Nat -> Nat = \ n -> con (:succ , n , :tt)
+
 eval succ (succ (succ zero))
   = con (:succ , con (:succ , con (:succ , con (:zero , :tt) , :tt) , :tt) , :tt)
   : Nat
+
 info succ
 defined succ
   : Nat -> Nat
   = \ n -> con (:succ , n , :tt)
+
 type succ (succ zero)
   : Nat
+
+end-of-file "examples/tutorial.ptt"
+

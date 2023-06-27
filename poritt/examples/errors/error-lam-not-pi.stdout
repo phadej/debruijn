@@ -1,3 +1,4 @@
+define foo : U = \ x -> x
 Error: examples/errors/error-lam-not-pi.ptt:1:17: Lambda abstraction should have function type
   * actual: U
   * When checking that \ x -> x has type U

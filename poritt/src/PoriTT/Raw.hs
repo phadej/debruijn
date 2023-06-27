@@ -2,6 +2,7 @@
 module PoriTT.Raw (
     Raw (..),
     rapp,
+    rapps,
     rsel,
     unRLoc,
     prettyRaw,
@@ -98,6 +99,9 @@ rapp :: Raw -> Raw -> Raw
 rapp (RApp f ts) t = RApp f (ts ++ [Right t])
 rapp f           t = RApp f [Right t]
 
+rapps :: Raw -> [Raw] -> Raw
+rapps = foldl' rapp
+
 -- | Selector application
 rsel :: Raw -> Selector -> Raw
 rsel (RApp f ts) s = RApp f (ts ++ [Left s])
@@ -115,7 +119,7 @@ class ToRaw t where
 
 -- precedences
 appp, annp, funp, sgmp, comp, keyp, splp :: Int
-splp = 11 -- 
+splp = 11 --
 appp = 10 -- left
 sgmp = 5  -- right
 funp = 4  -- right
@@ -153,7 +157,7 @@ prettyRaw d (RDeX t)         = ppParensIf (d > appp) $ "`X" <+> prettyRaw (appp 
 prettyRaw d (RDeI e m x y z) = ppParensIf (d > appp) $ prettyApp "indDesc" (map (prettyRaw (appp +1)) [e,m,x,y,z])
 prettyRaw d (RCod a)         = ppParensIf (d > appp) $ prettyApp "Code" [prettyRaw (appp + 1) a]
 prettyRaw _ (RQuo t)         = ppQuote $ prettyRaw 0 t
-prettyRaw d (RSpl t)         = ppParensIf (d > splp) $ "~" <> prettyRaw (splp + 1) t
+prettyRaw d (RSpl t)         = ppParensIf (d > splp) $ "$" <> prettyRaw (splp + 1) t
 prettyRaw _ RUni             = "U"
 prettyRaw _ RHol             = "_"
 

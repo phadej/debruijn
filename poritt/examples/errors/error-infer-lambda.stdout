@@ -1,3 +1,4 @@
+define foo = \ x -> x
 Error: examples/errors/error-infer-lambda.ptt:1:13: Cannot infer type of a lambda abstraction
   * When infering type of \ x -> x
 ExitFailure

@@ -10,6 +10,7 @@ module PoriTT.Quote (
     prettyVTerm,
     nfTerm,
     nfElim,
+    preElim,
 ) where
 
 import PoriTT.Base
@@ -17,6 +18,7 @@ import PoriTT.Eval
 import PoriTT.Name
 import PoriTT.PP
 import PoriTT.Term
+import PoriTT.Value
 
 -------------------------------------------------------------------------------
 -- Quoting
@@ -50,7 +52,7 @@ quoteTerm _ _ VDe1          = pure De1
 quoteTerm _ _ (VLbl l)      = pure (Lbl l)
 quoteTerm _ _ (VFin ls)     = pure (Fin ls)
 quoteTerm u s (VCod t)      = Cod <$> quoteTerm u s t
-quoteTerm u s (VQuo t)      = Quo <$> quoteTerm u s t
+quoteTerm _ s (VQuo t _)    = Quo <$> quoteSTerm NZ s t
 quoteTerm u s (VEmb e)      = emb <$> quoteElim u s e
 
 quoteElim :: Unfold -> Size ctx -> VElim ctx -> Either EvalError (Elim ctx)
@@ -76,6 +78,44 @@ quoteSpine u s h (VInd sp m t)     = Ind <$> quoteSpine u s h sp <*> quoteTerm u
 quoteSpine u s h (VSpl sp)         = Spl <$> quoteSpine u s h sp
 
 -------------------------------------------------------------------------------
+-- Quoting of STerm and SElim
+-------------------------------------------------------------------------------
+
+quoteSTerm :: Natural -> Size ctx -> STerm ctx -> Either EvalError (Term ctx)
+quoteSTerm l      s (SLam n clos) = Lam n <$> quoteSTerm l (SS s) (runSTZ l s clos)
+quoteSTerm l      s (SPie x a b)  = Pie x <$> quoteSTerm l s a <*> quoteSTerm l (SS s) (runSTZ l s b)
+quoteSTerm l      s (SSgm x a b)  = Sgm x <$> quoteSTerm l s a <*> quoteSTerm l (SS s) (runSTZ l s b)
+quoteSTerm l      s (SMul t r)    = Mul <$> quoteSTerm l s t <*> quoteSTerm l s r
+quoteSTerm _      _ SUni          = pure Uni
+quoteSTerm _      _ SDsc          = pure Dsc
+quoteSTerm _      _ SDe1          = pure De1
+quoteSTerm l      s (SDeS t r)    = DeS <$> quoteSTerm l s t <*> quoteSTerm l s r
+quoteSTerm l      s (SDeX t)      = DeX <$> quoteSTerm l s t
+quoteSTerm _      _ (SLbl l)      = pure (Lbl l)
+quoteSTerm _      _ (SFin ls)     = pure (Fin ls)
+quoteSTerm l      s (SMuu t)      = Muu <$> quoteSTerm l s t
+quoteSTerm l      s (SCon t)      = Con <$> quoteSTerm l s t
+quoteSTerm l      s (SCod t)      = Cod <$> quoteSTerm l s t
+quoteSTerm l      s (SQuo t)      = Quo <$> quoteSTerm (NS l) s t
+quoteSTerm l      s (SEmb e)      = Emb <$> quoteSElim l s e
+quoteSTerm NZ     s (SVal t)      = quoteTerm UnfoldNone s t
+quoteSTerm (NS _) _ (SVal _)      = Left EvalErrorStg
+
+quoteSElim :: Natural -> Size ctx -> SElim ctx -> Either EvalError (Elim ctx)
+quoteSElim _      s (SVar x)         = pure $ Var (lvlToIdx s x)
+quoteSElim _      _ (SGbl g)         = pure $ Gbl g
+quoteSElim l      s (SApp f t)       = App <$> quoteSElim l s f <*> quoteSTerm l s t
+quoteSElim l      s (SSel e t)       = Sel <$> quoteSElim l s e <*> pure t
+quoteSElim l      s (SSwh e m ts)    = Swh <$> quoteSElim l s e <*> quoteSTerm l s m <*> traverse (quoteSTerm l s) ts
+quoteSElim l      s (SInd e m t)     = Ind <$> quoteSElim l s e <*> quoteSTerm l s m <*> quoteSTerm l s t
+quoteSElim l      s (SDeI e m x y z) = DeI <$> quoteSElim l s e <*> quoteSTerm l s m <*> quoteSTerm l s x <*> quoteSTerm l s y <*> quoteSTerm l s z
+quoteSElim l      s (SAnn t a)       = Ann <$> quoteSTerm l s t <*> quoteSTerm l s a
+quoteSElim (NS l) s (SSpl e)         = Spl <$> quoteSElim l s e
+quoteSElim NZ     _ (SSpl _)         = Left EvalErrorStg -- shouldn't be top-level splices anymore
+quoteSElim l      s (SLet x e f)     = Let x <$> quoteSElim l s e <*> quoteSElim l (SS s) (runSEZ l s f)
+quoteSElim _      _ (SErr msg)       = Left msg
+
+-------------------------------------------------------------------------------
 -- Normalisation
 -------------------------------------------------------------------------------
 
@@ -86,15 +126,22 @@ nfElim :: Unfold  -> Size ctx' -> EvalEnv ctx ctx' -> Elim ctx -> Either EvalErr
 nfElim u s ee t = quoteElim u s (evalElim s ee t)
 
 -------------------------------------------------------------------------------
+-- Staging
+-------------------------------------------------------------------------------
+
+preElim :: Size ctx' -> EvalEnv' ctx ctx' -> Elim ctx -> Either EvalError (Elim ctx')
+preElim s env e = quoteSElim NZ s (stageElim NZ s env e)
+
+-------------------------------------------------------------------------------
 -- Pretty printing
 -------------------------------------------------------------------------------
 
 prettyVTerm :: Size ctx -> NameScope -> Env ctx Name -> VTerm ctx -> Doc
 prettyVTerm s ns env v = case quoteTerm UnfoldNone s v of
-    Left err -> ppText (show err) -- This shouldn't happen if type-checker is correct.
+    Left err -> ppStr (show err) -- This shouldn't happen if type-checker is correct.
     Right n  -> prettyTerm ns env 0 n
 
 prettyVElim :: Size ctx -> NameScope -> Env ctx Name -> VElim ctx -> Doc
 prettyVElim s ns env v = case quoteElim UnfoldNone s v of
-    Left err -> ppText (show err) -- This shouldn't happen if type-checker is correct.
+    Left err -> ppStr (show err) -- This shouldn't happen if type-checker is correct.
     Right e  -> prettyElim ns env 0 e

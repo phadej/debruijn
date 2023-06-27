@@ -25,7 +25,7 @@ data Well ctx where
     WSwh :: Well ctx -> Well ctx -> Map Label (Well ctx) -> Well ctx
     WAnn :: Well ctx -> Well ctx -> Well ctx
     WLet :: Name -> Well ctx -> Well (S ctx) -> Well ctx
-    WLbl :: Label -> Well ctx
+    WLbl :: Label -> [Well ctx] -> Well ctx
     WFin :: Set Label -> Well ctx
     WDsc :: Well ctx
     WDe1 :: Well ctx
@@ -62,7 +62,7 @@ instance RenamableA Well where
     grename r (WDeI d m x y z) = WDeI <$> grename r d <*> grename r m <*> grename r x <*> grename r y <*> grename r z
     grename r (WVar i)         = WVar <$> grename r i
     grename _ (WGbl g)         = pure (WGbl g)
-    grename _ (WLbl l)         = pure (WLbl l)
+    grename r (WLbl l ts)      = WLbl l <$> traverse (grename r) ts
     grename _ (WFin ls)        = pure (WFin ls)
     grename r (WApp f t)       = WApp <$> grename r f <*> grename r t
     grename r (WSel e s)       = flip WSel s <$> grename r e
@@ -86,12 +86,14 @@ instance Var Well where
     var = WVar
 
 instance Subst Well where
-    subst sub (WVar x)   = substIdx sub x
-    subst sub (WApp f t) = WApp (subst sub f) (subst sub t)
-    subst _   (WLbl l)   = WLbl l
-    subst sub (WMul t s) = WMul (subst sub t) (subst sub s)
-    subst sub (WCon t)   = WCon (subst sub t)
-    subst sub (WLoc _ t) = subst sub t
+    subst sub (WVar x)    = substIdx sub x
+    subst sub (WApp f t)  = WApp (subst sub f) (subst sub t)
+    subst sub (WLbl l ts) = WLbl l (subst sub <$> ts)
+    subst sub (WMul t s)  = WMul (subst sub t) (subst sub s)
+    subst sub (WCon t)    = WCon (subst sub t)
+    subst sub (WLoc _ t)  = subst sub t
+    subst sub (WLam n w)  = WLam n (subst (keepSub sub) w)
+
     subst _  t = error $ show t
 
 -------------------------------------------------------------------------------
@@ -127,7 +129,7 @@ instance ToRaw Well where
 
     toRaw ns env (WMul t s)       = RMul (toRaw ns env t) (toRaw ns env s)
     toRaw _  _   WUni             = RUni
-    toRaw _  _   (WLbl l)         = RLbl l
+    toRaw ns env (WLbl l ts)      = rapps (RLbl l) (toRaw ns env <$> ts)
     toRaw _  _   (WFin ls)        = RFin ls
     toRaw _  env (WVar i)         = RVar (lookupEnv i env)
     toRaw _  _   (WGbl g)         = RGbl g

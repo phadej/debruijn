@@ -1,0 +1,35 @@
+define Bool : U = {:false :true}
+defined Bool : U = {:false :true}
+
+define true : Bool = :true
+defined true : Bool = :true
+
+define false : Bool = :false
+defined false : Bool = :false
+
+define if
+  : Bool -> forall (A : U) -> A -> A -> A
+  = \ b A t f -> switch b (\ _ -> A) {:false -> f; :true -> t}
+defined if
+  : Bool -> forall (A : U) -> A -> A -> A
+  = \ b A t f -> switch b (\ _ -> A) {:false -> f; :true -> t}
+
+define not : Bool -> Bool = \ b -> if b Bool false true
+defined not : Bool -> Bool = \ b -> if b Bool false true
+
+define and
+  : Bool -> Bool -> Bool
+  = \ x y -> switch x (\ _ -> Bool) {:false -> :false; :true -> y}
+defined and
+  : Bool -> Bool -> Bool
+  = \ x y -> switch x (\ _ -> Bool) {:false -> :false; :true -> y}
+
+define or
+  : Bool -> Bool -> Bool
+  = \ x y -> switch x (\ _ -> Bool) {:false -> y; :true -> :true}
+defined or
+  : Bool -> Bool -> Bool
+  = \ x y -> switch x (\ _ -> Bool) {:false -> y; :true -> :true}
+
+end-of-file "examples/lib/bool.ptt"
+

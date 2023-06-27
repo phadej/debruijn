@@ -1,8 +1,14 @@
 define U1 : U = ((\ x -> x) : U -> U) U
 defined U1 : U = U
+
 define U2 : U = (U , U : U * U) .fst
 defined U2 : U = U
+
 define U3 : U = (U , U : U * U) .snd
 defined U3 : U = U
+
 define U4 : U = switch (:tt : {:tt}) (\ _ -> U) {:tt -> U}
 defined U4 : U = U
+
+end-of-file "examples/simpl.ptt"
+

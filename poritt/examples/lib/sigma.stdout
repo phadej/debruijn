@@ -1,0 +1,20 @@
+define sig : forall (A : U) (B : A -> U) -> U = \ A B -> exists (x : A) * B x
+defined sig : forall (A : U) -> (A -> U) -> U = \ A B -> exists (x : A) * B x
+
+define indSig
+  : forall
+      (A : U)
+      (B : A -> U)
+      (e : sig A B)
+      (M : sig A B -> U)
+      (m : forall (x : A) (y : B x) -> M (x , y)) ->
+      M e
+  = \ A B e M m -> m (e .fst) (e .snd)
+defined indSig
+  : forall
+      (A : U) (B : A -> U) (e : sig A B) (M : sig A B -> U) ->
+      (forall (x : A) (y : B x) -> M (x , y)) -> M e
+  = \ A B e M m -> m (e .fst) (e .snd)
+
+end-of-file "examples/lib/sigma.ptt"
+

@@ -4,17 +4,27 @@ define Id
 defined Id
   : forall (A : U) -> A -> A -> U
   = \ A x y -> forall (C : A -> U) -> C x -> C y
+
 define refl : forall (A : U) (x : A) -> Id A x x = \ A x C Cx -> Cx
 defined refl : forall (A : U) (x : A) -> Id A x x = \ A x C Cx -> Cx
+
+macro %refl = \ _ Cx -> Cx
+macro %refl 
+  = \ _ Cx -> Cx
+
 define sym
   : forall (A : U) (x : A) (y : A) -> Id A x y -> Id A y x
   = \ A x y x=y -> x=y (\ z -> Id A z x) (refl A x)
 defined sym
   : forall (A : U) (x : A) (y : A) -> Id A x y -> Id A y x
   = \ A x y x=y -> x=y (\ z -> Id A z x) (refl A x)
+
 define trans
   : forall (A : U) (x : A) (y : A) (z : A) -> Id A x y -> Id A y z -> Id A x z
   = \ A x y z x=y y=z -> y=z (\ v -> Id A x v) x=y
 defined trans
   : forall (A : U) (x : A) (y : A) (z : A) -> Id A x y -> Id A y z -> Id A x z
   = \ A x y z x=y y=z -> y=z (\ v -> Id A x v) x=y
+
+end-of-file "examples/lib/leibniz.ptt"
+

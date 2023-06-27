@@ -1,0 +1,46 @@
+-- Lists
+
+define ListC : U = {:nil :cons}
+define ListF : U -> ListC -> Desc = \ A c -> switch c (\ _ -> Desc)
+    { :nil  -> `1
+    ; :cons -> `S A \ _ -> `X `1
+    }
+
+define ListD : U -> Desc = \ A -> `S ListC (ListF A)
+
+define List : U -> U = \ A -> mu (ListD A)
+
+define nil  : forall (A : U) -> List A = \ _ -> :nil
+define cons : forall (A : U) -> A -> List A -> List A = \ _ x xs -> :cons x xs
+
+-- Or we can define macros
+macro %nil       = con (:nil , :tt)
+macro %cons x xs = con (:cons , x , xs , :tt)
+
+include "sigma.ptt"
+
+define foldr
+  : forall (A B : U) -> (A -> B -> B) -> B -> List A -> B
+  = \ A B consC nilC e ->
+    ind e (\ _ -> B) \ d ->
+    indSig ListC (\ c -> evalDesc (ListF A c) (List A)) d (\ d' -> All (ListD A) (mu (ListD A)) (\ _ -> B) d' -> B) \ c ->
+    switch c (\ c' -> forall (y : evalDesc (ListF A c') (List A)) -> All (ListD A) (mu (ListD A)) (\ _ -> B) (c' , y) -> B)
+      { :nil  -> \ _ _   -> nilC
+      ; :cons -> \ x acc -> consC (x .fst) (acc .fst)
+      }
+
+define indList
+  : forall
+    (A : U)
+    (e : List A)
+    (M : List A -> U)
+    (Mnil : M (nil A))
+    (Mcons : forall (x : A) (xs : List A) -> M xs -> M (cons A x xs))
+  -> M e
+  = \ A e M Mnil Mcons ->
+    ind e M \ d ->
+    indSig ListC (\ c -> evalDesc (ListF A c) (List A)) d (\ d' -> All (ListD A) (mu (ListD A)) M d' -> M (con d')) \ c ->
+    switch c (\ c' -> forall (y : evalDesc (ListF A c') (List A)) -> All (ListD A) (mu (ListD A)) M (c' , y) -> M (con (c' , y)))
+      { :nil  -> \ e' allE -> Mnil
+      ; :cons -> \ e' allE -> Mcons (e' .fst) (e' .snd .fst) (allE .fst)
+      }

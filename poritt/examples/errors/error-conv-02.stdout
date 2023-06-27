@@ -4,13 +4,17 @@ define Id
 defined Id
   : forall (A : U) -> A -> A -> U
   = \ A x y -> forall (C : A -> U) -> C x -> C y
+
 define idtype = forall (A : U) -> A -> A
 defined idtype : U = forall (A : U) -> A -> A
+
 define id : idtype = \ _ A -> A
 defined id : idtype = \ _ A -> A
+
 eval (\ _ Cx -> Cx) : Id idtype (id idtype id) id
   = \ _ Cx -> Cx
   : Id idtype (id idtype id) id
+
 Error: examples/errors/error-conv-02.ptt:11:18: Couldn't match types
   * expected: C (f :tt)
   * actual: C (f :tt idtype (f :tt))

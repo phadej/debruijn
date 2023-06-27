@@ -1,3 +1,4 @@
+define fix : forall (A : U) -> (A -> A) -> A = \ A f -> f
 Error: examples/errors/error-type.ptt:2:22: Couldn't match types
   * expected: A
   * actual: A -> A

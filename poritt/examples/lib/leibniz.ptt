@@ -4,6 +4,8 @@ define Id : forall (A : U) (x y : A) -> U
 define refl : forall (A : U) (x : A) -> Id A x x
             = \ A x C Cx -> Cx
 
+macro %refl = \ _ Cx -> Cx
+
 define sym : forall (A : U) (x y : A) -> Id A x y -> Id A y x
            = \ A x y x=y -> x=y (\ z -> Id A z x) (refl A x)
 

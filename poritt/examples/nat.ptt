@@ -1,92 +1,22 @@
--- Description for natural numbers:
--- constructors, fields, and the description itself.
-define NatC : U = {:zero :succ}
-define NatF : NatC -> Desc = \ c -> switch c (\ _ -> Desc)
-    { :zero -> `1
-    ; :succ -> `X `1
-    }
-define NatD : Desc = `S NatC NatF
+include "lib/nat.ptt"
+include "lib/leibniz.ptt"
 
--- Natural numbers
-define Nat : U = mu NatD
-eval Nat
+section "numbers"
 
-define zero : Nat = con (:zero , :tt)
-define succ : Nat -> Nat = \ n -> con (:succ , n , :tt)
-
-define two = succ (succ zero)
 eval two
-define three = succ two
 eval three
 
--- Sigma type
-define sig : forall (A : U) (B : A -> U) -> U = \ A B -> exists (x : A) * B x
-
--- Sigma induction
---
--- Without eta-expansion of sigma this fails with:
---
---  * expected: M e
---  * actual: M (e .fst , e .snd)
---
-define indSig
-  : forall (A : U)
-           (B : A -> U)
-           (e : sig A B)
-           (M : sig A B -> U)
-           (m : forall (x : A) (y : B x) -> M (x , y))
-        -> M e
-  = \ A B e M m -> m (e .fst) (e .snd)
-
--- doesn't look as nice as it could (as in Agda) as we don't have eta for unit.
-define indNat'
-  : forall (M : Nat -> U)
-           (Mzero : M zero)
-           (Msucc : forall (n : Nat) -> M n -> M (succ n))
-           (e : Nat) -> M e
-  = \ M Mzero Msucc e ->
-    ind e M \ d ->
-    indSig NatC (\ c -> evalDesc (NatF c) Nat) d (\ d' -> All (NatF (d' .fst)) Nat M (d' .snd) -> M (con d')) \ c ->
-    switch c (\ c' -> forall (y : evalDesc (NatF c') Nat) -> All (NatF c') Nat M y -> M (con (c' , y)))
-      { :zero -> \ tt -> -- \ _ -> Mzero                    -- if we had unit eta-expansion
-         switch tt (\ y -> All (NatF :zero) Nat M y -> M (con (:zero , y)))
-            { :tt -> \ _ -> Mzero
-            }
-      ; :succ -> \ n -> -- Msucc (n .fst) (Mn .fst) -- if we had unit eta-expansion
-         switch (n .snd) (\ y -> All (NatF :succ) Nat M (n .fst , y) -> M (con (:succ , n .fst , y)))
-            { :tt -> \ Mn -> Msucc (n .fst) (Mn .fst)
-            }
-      }
-
--- We have eta-expanion of unit type:
-define indNat
-  : forall (M : Nat -> U)
-           (Mzero : M zero)
-           (Msucc : forall (n : Nat) -> M n -> M (succ n))
-           (e : Nat) -> M e
-  = \ M Mzero Msucc e ->
-    ind e M \ d ->
-    indSig NatC (\ c -> evalDesc (NatF c) Nat) d (\ d' -> All (NatF (d' .fst)) Nat M (d' .snd) -> M (con d')) \ c ->
-    switch c (\ c' -> forall (y : evalDesc (NatF c') Nat) -> All (NatF c') Nat M y -> M (con (c' , y)))
-      { :zero -> \ _ _  -> Mzero                    -- if we had unit eta-expansion
-      ; :succ -> \ n Mn -> Msucc (n .fst) (Mn .fst)
-      }
-
-eval indNat
-
-define iterNat
- : forall (A : U) -> A -> (A -> A) -> Nat -> A
- = \ A z s n -> indNat (\ _ -> A) z (\ _ n -> s n) n
+section "Nat iteration"
 
 eval iterNat
 
-define plus : Nat -> Nat -> Nat
-            = \ n m -> iterNat Nat m succ n
+section "Arithmetic examples"
 
 eval plus two two
-
-define mult : Nat -> Nat -> Nat
-            = \ n m -> iterNat Nat zero (plus m) n
-
 eval mult two three
 eval mult three two
+
+section "Syntax sugar"
+
+type :zero : Nat
+type (\n -> :succ n) : Nat -> Nat

@@ -1,15 +1,23 @@
 type Desc
   : U
+
 eval Desc = Desc : U
+
 type `1
   : Desc
+
 eval `1 = `1 : Desc
+
 type `X `1
   : Desc
+
 eval `X `1 = `X `1 : Desc
+
 type `S {:tt} (\ _ -> `1)
   : Desc
+
 eval `S {:tt} (\ _ -> `1) = `S {:tt} (\ _ -> `1) : Desc
+
 define indDescType
   = forall
       (d : Desc)
@@ -29,15 +37,18 @@ defined indDescType
          (S : U) (D : S -> Desc) ->
          (forall (s : S) -> M (D s)) -> M (`S S D)) ->
       (forall (D : Desc) -> M D -> M (`X D)) -> M d
+
 define indDescTerm
   : indDescType
   = \ d M case1 caseS caseX -> indDesc d M case1 caseS caseX
 defined indDescTerm
   : indDescType
   = \ d M case1 caseS caseX -> indDesc d M case1 caseS caseX
+
 eval indDescTerm
   = \ d M case1 caseS caseX -> indDesc d M case1 caseS caseX
   : indDescType
+
 eval indDescTerm `1
   = \ M case1 caseS caseX -> case1
   : forall
@@ -47,6 +58,7 @@ eval indDescTerm `1
          (S : U) (D : S -> Desc) ->
          (forall (s : S) -> M (D s)) -> M (`S S D)) ->
       (forall (D : Desc) -> M D -> M (`X D)) -> M `1
+
 eval indDescTerm (`X `1)
   = \ M case1 caseS caseX -> caseX `1 case1
   : forall
@@ -56,6 +68,7 @@ eval indDescTerm (`X `1)
          (S : U) (D : S -> Desc) ->
          (forall (s : S) -> M (D s)) -> M (`S S D)) ->
       (forall (D : Desc) -> M D -> M (`X D)) -> M (`X `1)
+
 eval indDescTerm (`S {:tt} (\ _ -> `X `1))
   = \ M case1 caseS caseX -> caseS {:tt} (\ _ -> `X `1) (\ s -> caseX `1 case1)
   : forall
@@ -65,15 +78,20 @@ eval indDescTerm (`S {:tt} (\ _ -> `X `1))
          (S : U) (D : S -> Desc) ->
          (forall (s : S) -> M (D s)) -> M (`S S D)) ->
       (forall (D : Desc) -> M D -> M (`X D)) -> M (`S {:tt} (\ _ -> `X `1))
+
 define idDesc
   : Desc -> Desc
   = \ d -> indDesc d (\ _ -> Desc) `1 (\ S D _ -> `S S D) (\ D _ -> `X D)
 defined idDesc
   : Desc -> Desc
   = \ d -> indDesc d (\ _ -> Desc) `1 (\ S D _ -> `S S D) (\ D _ -> `X D)
+
 eval idDesc `1 = `1 : Desc
+
 eval idDesc (`X `1) = `X `1 : Desc
+
 eval idDesc (`S {:tt} (\ _ -> `X `1)) = `S {:tt} (\ _ -> `X `1) : Desc
+
 info evalDesc
 defined evalDesc
   : Desc -> U -> U
@@ -84,6 +102,7 @@ defined evalDesc
         {:tt}
         (\ S D F -> exists (s : S) * F s)
         (\ D F -> X * F)
+
 define evalDesc'
   : Desc -> U -> U
   = \ d X ->
@@ -102,8 +121,11 @@ defined evalDesc'
         {:tt}
         (\ S D F -> exists (s : S) * F s)
         (\ D F -> X * F)
+
 eval evalDesc' (`S {:zz} (\ _ -> `X `1)) = \ X -> {:zz} * X * {:tt} : U -> U
+
 eval evalDesc (`S {:zz} (\ _ -> `X `1)) = \ X -> {:zz} * X * {:tt} : U -> U
+
 info All
 defined All
   : forall (D : Desc) (X : U) -> (X -> U) -> evalDesc D X -> U
@@ -114,6 +136,7 @@ defined All
         (\ xs -> {:tt})
         (\ S D Dm xs -> Dm (xs .fst) (xs .snd))
         (\ D Dm xs -> P (xs .fst) * Dm (xs .snd))
+
 define All'
   : forall (D : Desc) (X : U) (P : X -> U) (xs : evalDesc D X) -> U
   = \ D' X P ->
@@ -132,6 +155,7 @@ defined All'
         (\ xs -> {:tt})
         (\ S D Dm xs -> Dm (xs .fst) (xs .snd))
         (\ D Dm xs -> P (xs .fst) * Dm (xs .snd))
+
 info all
 defined all
   : forall
@@ -144,6 +168,7 @@ defined all
         (\ xs -> :tt)
         (\ S D allD xs -> allD (xs .fst) (xs .snd))
         (\ D allD xs -> p (xs .fst) , allD (xs .snd))
+
 define all'
   : forall
       (D : Desc)
@@ -170,3 +195,6 @@ defined all'
         (\ xs -> :tt)
         (\ S D allD xs -> allD (xs .fst) (xs .snd))
         (\ D allD xs -> p (xs .fst) , allD (xs .snd))
+
+end-of-file "examples/descriptions.ptt"
+

@@ -1,0 +1,46 @@
+-- Description for natural numbers:
+-- constructors, fields, and the description itself.
+define NatC : U = {:zero :succ}
+define NatF : NatC -> Desc = \ c -> switch c (\ _ -> Desc)
+    { :zero -> `1
+    ; :succ -> `X `1
+    }
+define NatD : Desc = `S NatC NatF
+
+-- Natural numbers
+define Nat : U = mu NatD
+eval Nat
+
+define zero : Nat = :zero
+define succ : Nat -> Nat = \ n -> :succ n
+
+define one   = succ zero
+define two   = succ one
+define three = succ two
+define four  = succ three
+define five  = succ four
+
+include "sigma.ptt"
+
+define indNat
+  : forall (M : Nat -> U)
+           (Mzero : M zero)
+           (Msucc : forall (n : Nat) -> M n -> M (succ n))
+           (e : Nat) -> M e
+  = \ M Mzero Msucc e ->
+    ind e M \ d ->
+    indSig NatC (\ c -> evalDesc (NatF c) Nat) d (\ d' -> All (NatF (d' .fst)) Nat M (d' .snd) -> M (con d')) \ c ->
+    switch c (\ c' -> forall (y : evalDesc (NatF c') Nat) -> All (NatF c') Nat M y -> M (con (c' , y)))
+      { :zero -> \ _ _  -> Mzero                    -- if we had unit eta-expansion
+      ; :succ -> \ n Mn -> Msucc (n .fst) (Mn .fst)
+      }
+
+define iterNat
+ : forall (A : U) -> A -> (A -> A) -> Nat -> A
+ = \ A z s n -> indNat (\ _ -> A) z (\ _ n -> s n) n
+
+define plus : Nat -> Nat -> Nat
+            = \ n m -> iterNat Nat m succ n
+
+define mult : Nat -> Nat -> Nat
+            = \ n m -> iterNat Nat zero (plus m) n

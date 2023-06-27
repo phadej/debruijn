@@ -1,3 +1,4 @@
+define foo : forall (x : U) -> U = forall (x : U) -> U
 Error: examples/errors/error-pi-not-u.ptt:1:37: forall type should have type U
   * actual: U -> U
   * When checking that U -> U has type U -> U

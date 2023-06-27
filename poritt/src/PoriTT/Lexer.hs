@@ -27,12 +27,15 @@ data Token
     = TkIdent Name        -- ^ identifiers: @foobar@
     | TkLabel Label       -- ^ labels: @:label@
     | TkSelector Selector -- ^ selectors: @.fst@ or @.snd@
+    | TkString Text       -- ^ string literal: @"literal"@
     | TkDefine            -- ^ keyword @define@
     | TkEval              -- ^ keyword @eval@
     | TkType              -- ^ keyword @type@
     | TkInfo              -- ^ keyword @info@
     | TkInline            -- ^ keyword @inline@
     | TkMacro             -- ^ keyword @macro@
+    | TkInclude           -- ^ keyword @include@
+    | TkSection           -- ^ keyword @section@
     | TkLet               -- ^ keyword @let@
     | TkIn                -- ^ keyword @in@
     | TkU                 -- ^ keyword @U@
@@ -54,6 +57,9 @@ data Token
     | TkRBracket          -- ^ right parenthesis: @]@
     | TkLBrace            -- ^ left parenthesis: @{@
     | TkRBrace            -- ^ right parenthesis: @}@
+    | TkLQuote            -- ^ left quote: @[|@
+    | TkRQuote            -- ^ right quote: @|]@
+    | TkVBar              -- ^ vertical bar: @|@
     | TkArrow             -- ^ arrow: @->@
     | TkBackSlash         -- ^ backslash: @\\@
     | TkColon             -- ^ colon: @:@
@@ -62,7 +68,8 @@ data Token
     | TkAst               -- ^ ast: @*@
     | TkEquals            -- ^ equals: @=@
     | TkHole              -- ^ hole: @_@
-    | TkTilde             -- ^ tilde: @~@
+    | TkDollar            -- ^ dollar: @$@
+    | TkHash              -- ^ hash: @#@
     | TkEOF               -- ^ end-of-file token
     | TkError String
   deriving (Eq)
@@ -71,6 +78,7 @@ showToken :: Token -> String
 showToken (TkIdent n) = "identifier " ++ show (prettyName n)
 showToken (TkLabel l) = "label " ++ show (prettyLabel l)
 showToken (TkSelector s) = "selector " ++ show (prettySelector s)
+showToken (TkString s) = show s
 showToken TkDefine    = "define"
 showToken TkEval      = "eval"
 showToken TkType      = "type"
@@ -79,6 +87,8 @@ showToken TkIn        = "in"
 showToken TkInfo      = "info"
 showToken TkInline    = "inline"
 showToken TkMacro     = "macro"
+showToken TkInclude   = "include"
+showToken TkSection   = "section"
 showToken TkU         = "U"
 showToken TkForall    = "forall"
 showToken TkExists    = "exists"
@@ -98,7 +108,11 @@ showToken TkLBracket  = "["
 showToken TkRBracket  = "]"
 showToken TkLBrace    = "{"
 showToken TkRBrace    = "}"
-showToken TkTilde     = "~"
+showToken TkLQuote    = "[|"
+showToken TkRQuote    = "|]"
+showToken TkVBar      = "|"
+showToken TkDollar    = "$"
+showToken TkHash      = "#"
 showToken TkArrow     = "->"
 showToken TkBackSlash = "\\"
 showToken TkColon     = ":"
@@ -155,9 +169,9 @@ isSpace c = ' ' == c || '\t' == c || '\n' == c
 
 isIdentChar :: Char -> Bool
 isIdentChar c
-    | isSpace c                = False
-    | elem c ('\\':"(){}[]~;") = False
-    | otherwise                = isPrint c
+    | isSpace c                 = False
+    | elem c ('\\':"(){}[]|$;") = False
+    | otherwise                 = isPrint c
 
 -------------------------------------------------------------------------------
 -- Scanning function
@@ -168,13 +182,23 @@ scan ls@(LS contents loc) = case T.uncons contents of
     Nothing                -> (TkEOF,       ls)
     Just ('(' , contents') -> (TkLParen,    LS contents' (advanceLoc loc "("))
     Just (')' , contents') -> (TkRParen,    LS contents' (advanceLoc loc ")"))
-    Just ('[' , contents') -> (TkLBracket,  LS contents' (advanceLoc loc "["))
+    Just ('[' , contents') -> case T.uncons contents' of
+        Just ('|', contents'') -> (TkLQuote,    LS contents'' (advanceLoc loc "[|"))
+        _                      -> (TkLBracket,  LS contents'  (advanceLoc loc "["))
+    Just ('|' , contents') -> case T.uncons contents' of
+        Just (']', contents'') -> (TkRQuote,    LS contents'' (advanceLoc loc "|]"))
+        _                      -> (TkVBar,      LS contents'  (advanceLoc loc "|"))
     Just (']' , contents') -> (TkRBracket,  LS contents' (advanceLoc loc "]"))
     Just ('{' , contents') -> (TkLBrace,    LS contents' (advanceLoc loc "{"))
     Just ('}' , contents') -> (TkRBrace,    LS contents' (advanceLoc loc "}"))
-    Just ('~' , contents') -> (TkTilde,     LS contents' (advanceLoc loc "~"))
+    Just ('$' , contents') -> (TkDollar,    LS contents' (advanceLoc loc "$"))
+    Just ('#' , contents') -> (TkHash,      LS contents' (advanceLoc loc "#"))
     Just (';' , contents') -> (TkSemi,      LS contents' (advanceLoc loc ";"))
     Just ('\\', contents') -> (TkBackSlash, LS contents' (advanceLoc loc "\\"))
+    Just ('"' , contents') -> case T.span (/= '"') contents' of
+        (pfx, sfx) -> case T.uncons sfx of
+            Nothing        -> (TkError "Unterminated string literal", ls)
+            Just (_, sfx') -> (TkString pfx, LS sfx' $ loc `advanceLoc` "\"" `advanceLoc` pfx `advanceLoc` "\"")
     Just (c,    _        )
         | isIdentChar c -> case T.span isIdentChar contents of
             (pfx, sfx)     -> (classify pfx, LS sfx (advanceLoc loc pfx))
@@ -188,6 +212,8 @@ classify "eval"    = TkEval
 classify "info"    = TkInfo
 classify "inline"  = TkInline
 classify "macro"   = TkMacro
+classify "include" = TkInclude
+classify "section" = TkSection
 classify "let"     = TkLet
 classify "in"      = TkIn
 classify "U"       = TkU

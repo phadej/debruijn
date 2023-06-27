@@ -33,4 +33,4 @@ advanceChar (Loc fn l _) '\n' = Loc fn (l + 1) 1
 advanceChar (Loc fn l c) _    = Loc fn l       (c + 1)
 
 prettyLoc :: Loc -> Doc
-prettyLoc (Loc fn l c) = ppText (fn ++ ":" ++ show l ++ ":" ++ show c)
+prettyLoc (Loc fn l c) = ppStr (fn ++ ":" ++ show l ++ ":" ++ show c)

@@ -127,6 +127,28 @@ defined mult : Nat -> Nat -> Nat = \ n m -> iterNat Nat zero (plus m) n
 
 end-of-file "examples/lib/nat.ptt"
 
+define power
+  : Nat -> Nat -> Nat
+  = \ n m -> iterNat Nat (succ zero) (\ acc -> mult m acc) n
+defined power
+  : Nat -> Nat -> Nat
+  = \ n m -> iterNat Nat (succ zero) (\ acc -> mult m acc) n
+
+define power5 = power five
+defined power5 : Nat -> Nat = power five
+
+define powerCode
+  : Nat -> Code Nat -> Code Nat
+  = \ n m -> iterNat (Code Nat) [| succ zero |] (\ acc -> [| mult $m $acc |]) n
+defined powerCode
+  : Nat -> Code Nat -> Code Nat
+  = \ n m -> iterNat (Code Nat) [| succ zero |] (\ acc -> [| mult $m $acc |]) n
+
+define power5' : Nat -> Nat = \ p -> $(powerCode five [| p |])
+defined power5'
+  : Nat -> Nat
+  = \ p -> mult p (mult p (mult p (mult p (mult p (succ zero)))))
+
 include "lib/leibniz.ptt"
 
 define Id
@@ -159,56 +181,11 @@ defined trans
 
 end-of-file "examples/lib/leibniz.ptt"
 
-section numbers
+type %refl : Id Nat (power5 two) (power5' two)
+  : Id Nat (power5 two) (power5' two)
 
-eval two = con (:succ , con (:succ , con (:zero , :tt) , :tt) , :tt) : Nat
+type %refl : Id (Nat -> Nat) power5 power5'
+  : Id (Nat -> Nat) power5 power5'
 
-eval three
-  = con (:succ , con (:succ , con (:succ , con (:zero , :tt) , :tt) , :tt) , :tt)
-  : Nat
-
-section Nat iteration
-
-eval iterNat
-  = \ A z s n ->
-      ind
-        n
-        (\ _ -> A)
-        (\ d ->
-           indSig
-             NatC
-             (\ c -> evalDesc (NatF c) Nat)
-             d
-             (\ d' -> All (NatF (d' .fst)) Nat (\ _ -> A) (d' .snd) -> A)
-             (\ c ->
-                switch c (\ c' ->
-                            forall
-                              (y : evalDesc (NatF c') Nat) ->
-                              All (NatF c') Nat (\ _ -> A) y -> A)
-                  {:succ -> \ n0 Mn -> s (Mn .fst); :zero -> \ _ _ -> z}))
-  : forall (A : U) -> A -> (A -> A) -> Nat -> A
-
-section Arithmetic examples
-
-eval plus two two
-  = con (:succ , con (:succ , con (:succ , con (:succ , con (:zero , :tt) , :tt) , :tt) , :tt) , :tt)
-  : Nat
-
-eval mult two three
-  = con (:succ , con (:succ , con (:succ , con (:succ , con (:succ , con (:succ , con (:zero , :tt) , :tt) , :tt) , :tt) , :tt) , :tt) , :tt)
-  : Nat
-
-eval mult three two
-  = con (:succ , con (:succ , con (:succ , con (:succ , con (:succ , con (:succ , con (:zero , :tt) , :tt) , :tt) , :tt) , :tt) , :tt) , :tt)
-  : Nat
-
-section Syntax sugar
-
-type :zero : Nat
-  : Nat
-
-type (\ n -> :succ n) : Nat -> Nat
-  : Nat -> Nat
-
-end-of-file "examples/nat.ptt"
+end-of-file "examples/staging-power.ptt"
 

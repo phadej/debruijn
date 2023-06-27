@@ -1,0 +1,13 @@
+define Bool : U     = {:true :false}
+define true : Bool  = :true
+define false : Bool = :false
+
+define if : Bool -> forall (A : U) -> A -> A -> A
+          = \ b A t f -> switch b (\ _ -> A) { :true -> t ; :false -> f }
+
+define not : Bool -> Bool
+           = \ b -> if b Bool false true
+define and : Bool -> Bool -> Bool
+           = \ x y -> switch x (\ _ -> Bool) { :false -> :false ; :true -> y }
+define or  : Bool -> Bool -> Bool
+           = \ x y -> switch x (\ _ -> Bool) { :true -> :true ; :false -> y }

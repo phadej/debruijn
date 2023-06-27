@@ -1,26 +1,25 @@
-define Id : forall (A : U) (x y : A) -> U
-          = \ A x y -> forall (C : A -> U) -> C x -> C y
+include "lib/leibniz.ptt"
 
 -- eta for pi
-type (\ _ _ Cx -> Cx) :
+type (\ _ -> %refl) :
   forall (f : U -> U)
   -> Id (U -> U) f (\ x -> f x)
 
 -- eta for sigma
-type (\ _ _ Cx -> Cx) :
+type (\ _ -> %refl) :
   forall (p : U * U)
   -> Id (U * U) p (p .fst , p .snd)
 
 -- eta for singleton types
-type (\ _ _ Cx -> Cx) :
+type (\ _ -> %refl) :
   forall (tt : {:tt})
   -> Id {:tt} tt :tt
 
-type (\ _ _ _ Cx -> Cx) :
+type (\ _ _ -> %refl) :
   forall (x y : {:tt})
   -> Id {:tt} x y
 
 -- product of singleton types
-type (\ _ _ _ Cx -> Cx) :
+type (\ _ _ -> %refl) :
   forall (x y : {:left} * {:right})
   -> Id ({:left} * {:right}) x y

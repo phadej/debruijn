@@ -1,3 +1,28 @@
+define I : forall (A : U) -> A -> A = \ _ x -> x
+defined I : forall (A : U) -> A -> A = \ _ x -> x
+
+type I
+  : forall (A : U) -> A -> A
+
+define K : forall (A : U) (B : U) -> A -> B -> A = \ _ _ x _ -> x
+defined K : forall (A : U) (B : U) -> A -> B -> A = \ _ _ x _ -> x
+
+eval K = \ _ _ x _ -> x : forall (A : U) (B : U) -> A -> B -> A
+
+define S
+  : forall (A : U) (B : U) (C : U) -> (A -> B -> C) -> (A -> B) -> A -> C
+  = \ _ _ _ x y z -> x z (y z)
+defined S
+  : forall (A : U) (B : U) (C : U) -> (A -> B -> C) -> (A -> B) -> A -> C
+  = \ _ _ _ x y z -> x z (y z)
+
+define I2
+  : forall (A : U) -> A -> A
+  = \ A -> S A (A -> A) A (K A (A -> A)) (K A A)
+defined I2
+  : forall (A : U) -> A -> A
+  = \ A -> S A (A -> A) A (K A (A -> A)) (K A A)
+
 include "lib/leibniz.ptt"
 
 define Id
@@ -30,25 +55,8 @@ defined trans
 
 end-of-file "examples/lib/leibniz.ptt"
 
-type (\ _ -> %refl) : forall (f : U -> U) -> Id (U -> U) f (\ x -> f x)
-  : forall (f : U -> U) -> Id (U -> U) f (\ x -> f x)
+type %refl : Id (forall (A : U) -> A -> A) I I2
+  : Id (forall (A : U) -> A -> A) I I2
 
-type (\ _ -> %refl) : forall (p : U * U) -> Id (U * U) p (p .fst , p .snd)
-  : forall (p : U * U) -> Id (U * U) p (p .fst , p .snd)
-
-type (\ _ -> %refl) : forall (tt : {:tt}) -> Id {:tt} tt :tt
-  : forall (tt : {:tt}) -> Id {:tt} tt :tt
-
-type (\ _ _ -> %refl) : forall (x : {:tt}) (y : {:tt}) -> Id {:tt} x y
-  : forall (x : {:tt}) (y : {:tt}) -> Id {:tt} x y
-
-type (\ _ _ -> %refl)
-       : forall
-           (x : {:left} * {:right}) (y : {:left} * {:right}) ->
-           Id ({:left} * {:right}) x y
-  : forall
-      (x : {:left} * {:right}) (y : {:left} * {:right}) ->
-      Id ({:left} * {:right}) x y
-
-end-of-file "examples/eta.ptt"
+end-of-file "examples/ski.ptt"
 

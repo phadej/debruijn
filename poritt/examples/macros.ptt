@@ -1,6 +1,6 @@
-macro $apply f t = f t
-info $apply
+macro %apply f t = f t
+info %apply
 
 define id : forall (A : U) -> A -> A = \ _ x -> x
 
-eval $apply id {:tt} :tt
+eval %apply id {:tt} :tt

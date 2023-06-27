@@ -17,10 +17,11 @@ import PoriTT.Global
 import PoriTT.Name
 import PoriTT.Nice
 import PoriTT.PP
-import PoriTT.Stage
 import PoriTT.Quote
+import PoriTT.Stage
 import PoriTT.Term
 import PoriTT.Used
+import PoriTT.Value
 
 -------------------------------------------------------------------------------
 -- Linting context

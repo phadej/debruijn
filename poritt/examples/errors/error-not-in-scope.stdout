@@ -1,3 +1,4 @@
+define const : forall (A : U) (B : U) -> A -> B -> A = \ _ _ x _ -> f y
 Error: examples/errors/error-not-in-scope.ptt:2:28: Variable not in scope f
 Error: examples/errors/error-not-in-scope.ptt:2:30: Variable not in scope y
 ExitFailure

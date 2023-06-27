@@ -14,6 +14,7 @@ module PoriTT.PP (
     ppSep,
     ppVCat,
     ppText,
+    ppStr,
     ppInt,
     ppHanging,
     ppSoftHanging,
@@ -21,10 +22,12 @@ module PoriTT.PP (
     ($$),
     (<//>),
     (</>),
+    prettyFilePath,
 ) where
 
 import Data.Coerce (coerce)
 import Data.String (IsString (..))
+import Data.Text (Text)
 
 import qualified Data.Text           as T
 import qualified Prettyprinter       as PP
@@ -39,6 +42,7 @@ data A
     | ASel
     | ACmd
     | AGbl
+    | AErr
   deriving (Eq, Ord, Show)
 
 newtype Doc = D (PP.Doc A)
@@ -120,6 +124,7 @@ sgrCode ASel = sgrCode' ANSI.Magenta
 sgrCode ALbl = sgrCode' ANSI.Magenta -- keywords and labels with the same color :(
 sgrCode AGbl = sgrCode' ANSI.Blue
 sgrCode ACon = sgrCode' ANSI.Cyan
+sgrCode AErr = ANSI.SetConsoleIntensity ANSI.BoldIntensity : sgrCode' ANSI.Red
 sgrCode ACmd = [ANSI.SetConsoleIntensity ANSI.BoldIntensity]
 
 sgrCode' :: ANSI.Color -> [ANSI.SGR]
@@ -130,7 +135,7 @@ ppParensIf True  = ppParens
 ppParensIf False = id
 
 ppQuote :: Doc -> Doc
-ppQuote = coerce (PP.brackets @A)
+ppQuote d = "[|" <+> d <+> "|]"
 
 ppParens :: Doc -> Doc
 ppParens = coerce (PP.parens @A)
@@ -141,8 +146,11 @@ pbraceSemi = pbraces . coerce (PP.sep @A . PP.punctuate ";")
 pbraces :: Doc -> Doc
 pbraces d = "{" <> d <> "}"
 
-ppText :: String -> Doc
-ppText = coerce (PP.pretty :: String -> PP.Doc A)
+ppStr :: String -> Doc
+ppStr = coerce (PP.pretty :: String -> PP.Doc A)
+
+ppText :: Text -> Doc
+ppText = coerce (PP.pretty :: Text -> PP.Doc A)
 
 ppInt :: Int -> Doc
 ppInt = D . PP.pretty
@@ -173,3 +181,6 @@ x $$ y = ppVCat [x, y]
 x <//> y = ppSoftHanging x [y]
 
 x </> y = ppSep [x, y]
+
+prettyFilePath :: FilePath -> Doc
+prettyFilePath fp = "\"" <> ppStr fp <> "\""

@@ -1,0 +1,19 @@
+include "lib/nat.ptt"
+
+define power
+  : Nat -> Nat -> Nat
+  = \n m -> iterNat Nat (succ zero) (\acc -> mult m acc) n
+
+define power5 = power five
+
+-- staged version
+define powerCode
+  : Nat -> Code Nat -> Code Nat
+  = \n m -> iterNat (Code Nat) [| succ zero |] (\acc -> [| mult $m $acc |]) n
+
+define power5' : Nat -> Nat = \p -> $(powerCode five [| p |])
+
+include "lib/leibniz.ptt"
+
+type %refl : Id Nat          (power5 two) (power5' two)
+type %refl : Id (Nat -> Nat) power5       power5'

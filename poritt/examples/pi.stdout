@@ -1,0 +1,20 @@
+define pi : forall (A : U) (B : A -> U) -> U = \ A B -> forall (x : A) -> B x
+defined pi : forall (A : U) -> (A -> U) -> U = \ A B -> forall (x : A) -> B x
+
+define indPi
+  : forall
+      (A : U)
+      (B : A -> U)
+      (e : pi A B)
+      (M : pi A B -> U)
+      (m : forall (y : forall (x : A) -> B x) -> M (\ x -> y x)) ->
+      M e
+  = \ A B e M m -> m e
+defined indPi
+  : forall
+      (A : U) (B : A -> U) (e : pi A B) (M : pi A B -> U) ->
+      (forall (y : forall (x : A) -> B x) -> M (\ x -> y x)) -> M e
+  = \ A B e M m -> m e
+
+end-of-file "examples/pi.ptt"
+

@@ -1,3 +1,4 @@
+define foo : U -> U = U
 Error: examples/errors/error-u-not-u.ptt:1:22: U should have type U
   * actual: U -> U
   * When checking that U has type U -> U

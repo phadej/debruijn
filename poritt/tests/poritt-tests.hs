@@ -26,7 +26,8 @@ main = do
                         exitCode (ExitFailure _) = hPutStrLn hdl "ExitFailure"
                         exitCode _               = return ()
 
-                    handle exitCode $ void $ batchFile defaultOpts inp hdl builtinEnvironment
+                    env <- builtinEnvironment hdl
+                    handle exitCode $ void $ batchFile defaultOpts inp env
 
             | ex <- examples
             , let tmp = tmpDir </> takeFileName ex -<.> "tmp"
