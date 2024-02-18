@@ -1,6 +1,9 @@
 -- | NanoTT is one module implementation of most things happening.
 module NanoTT where
 
+import Control.Monad.Trans.Class        (lift)
+import Control.Monad.Trans.Except       (ExceptT, runExceptT, throwE)
+import Control.Monad.Trans.State.Strict (State, evalState, get, put)
 import NanoTT.Base
 
 -------------------------------------------------------------------------------
@@ -51,37 +54,48 @@ deriving instance Show (Term ctx)
 deriving instance Show (Elim ctx)
 
 -------------------------------------------------------------------------------
--- * Closures and evaluation environment
+-- * ClosureTs and evaluation environment
 -------------------------------------------------------------------------------
 
 -- | Evaluation environment value: A 'VElim' and a 'Lvl'.
-data BElim ctx = BElim (VElim ctx) (Maybe (Lvl ctx))
+data EvalElim ctx = EvalElim (VElim ctx) (SElim ctx)
   deriving Show
 
 -- | Evaluation environment.
 type EvalEnv :: Ctx -> Ctx -> Type
-type EvalEnv ctx ctx' = Env ctx (BElim ctx')
+type EvalEnv ctx ctx' = Env ctx (EvalElim ctx')
 
--- | Closure, a term to be evaluated, but which needs an extra value.
-type Closure :: Ctx -> Type
-data Closure ctx' where Closure :: EvalEnv ctx ctx' -> Term (S ctx) -> Closure ctx'
+-- | ClosureT, a term to be evaluated, but which needs an extra value.
+type ClosureT :: Ctx -> Type
+data ClosureT ctx' where ClosureT :: EvalEnv ctx ctx' -> Term (S ctx) -> ClosureT ctx'
+deriving instance Show (ClosureT ctx)
 
-deriving instance Show (Closure ctx)
+-- | Closure over an elimination.
+type ClosureE :: Ctx -> Type
+data ClosureE ctx' where ClosureE :: EvalEnv ctx ctx' -> Elim (S ctx) -> ClosureE ctx'
+deriving instance Show (ClosureE ctx)
 
-run :: Size ctx -> Closure ctx -> BElim ctx -> VTerm ctx
-run s (Closure env f) t = evalTerm s (env :> t) f
+run :: Size ctx -> ClosureT ctx -> EvalElim ctx -> VTerm ctx
+run s (ClosureT env f) t = evalTerm s (env :> t) f
 
-runZ :: Size ctx -> Closure ctx -> VTerm (S ctx)
-runZ s clos = run (SS s) (sink clos) (bvalZ s)
+runZ :: Size ctx -> ClosureT ctx -> VTerm (S ctx)
+runZ s clos = run (SS s) (sink clos) (evalZ s)
+
+srunTZ :: Size ctx -> ClosureT ctx -> STerm (S ctx)
+srunTZ s (sink -> ClosureT env f) = stageTerm (SS s) (env :> evalZ s) f
+
+srunEZ :: Size ctx -> ClosureE ctx -> SElim (S ctx)
+srunEZ s (sink -> ClosureE env f) = stageElim (SS s) (env :> evalZ s) f
 
 valZ :: Size ctx -> VElim (S ctx)
 valZ s = VNeu (lvlZ s) VNil
 
-bvalZ :: Size ctx -> BElim (S ctx)
-bvalZ s = BElim (VNeu (lvlZ s) VNil) (Just (lvlZ s))
+evalZ :: Size ctx -> EvalElim (S ctx)
+evalZ s = EvalElim (VNeu (lvlZ s) VNil) (SVar (lvlZ s))
 
-instance Sinkable BElim where mapLvl f (BElim v l) = BElim (mapLvl f v) (fmap (mapLvl f) l)
-instance Sinkable Closure where mapLvl f (Closure env t) = Closure (fmap (mapLvl f) env) t
+instance Sinkable EvalElim where mapLvl f (EvalElim v l) = EvalElim (mapLvl f v) (mapLvl f l)
+instance Sinkable ClosureT where mapLvl f (ClosureT env t) = ClosureT (fmap (mapLvl f) env) t
+instance Sinkable ClosureE where mapLvl f (ClosureE env t) = ClosureE (fmap (mapLvl f) env) t
 
 -------------------------------------------------------------------------------
 -- * Values
@@ -89,8 +103,8 @@ instance Sinkable Closure where mapLvl f (Closure env t) = Closure (fmap (mapLvl
 
 type VTerm :: Ctx -> Type
 data VTerm ctx where
-    VPie :: VTerm ctx -> Closure ctx -> VTerm ctx
-    VLam :: Closure ctx -> VTerm ctx
+    VPie :: VTerm ctx -> ClosureT ctx -> VTerm ctx
+    VLam :: ClosureT ctx -> VTerm ctx
     VUni :: VTerm ctx
     VCod :: VTerm ctx -> VTerm ctx
     VQuo :: VTerm ctx -> STerm ctx -> VTerm ctx
@@ -116,11 +130,11 @@ data Spine ctx
 type STerm :: Ctx -> Type
 data STerm ctx where
     SUni :: STerm ctx
-    -- SPie
-    -- SLam
-    -- SCod
-    -- SQuo
-    -- SEqu
+    SPie :: STerm ctx -> ClosureT ctx -> STerm ctx
+    SLam :: ClosureT ctx -> STerm ctx
+    SCod :: STerm ctx -> STerm ctx
+    SQuo :: STerm ctx -> STerm ctx
+    SEqu :: STerm ctx -> STerm ctx -> STerm ctx -> STerm ctx
     SRfl :: STerm ctx
     SOne :: STerm ctx
     SAst :: STerm ctx
@@ -129,11 +143,12 @@ data STerm ctx where
 type SElim :: Ctx -> Type
 data SElim ctx where
     SErr :: String -> SElim ctx
+    SRgd :: Rigid -> SElim ctx
     SVar :: Lvl ctx -> SElim ctx
     SApp :: SElim ctx -> STerm ctx -> SElim ctx
     SSpl :: VElim ctx -> SElim ctx -> SElim ctx
     SAnn :: STerm ctx -> STerm ctx -> SElim ctx
-    SLet :: SElim ctx -> Closure ctx -> SElim ctx
+    SLet :: SElim ctx -> ClosureE ctx -> SElim ctx
 
 deriving instance Show (VTerm ctx)
 deriving instance Show (VElim ctx)
@@ -164,14 +179,20 @@ instance Sinkable Spine where
     mapLvl f (VSpl xs)   = VSpl (mapLvl f xs)
 
 instance Sinkable STerm where
-    mapLvl _ SUni     = SUni
-    mapLvl _ SOne     = SOne
-    mapLvl _ SAst     = SAst
-    mapLvl _ SRfl     = SRfl
-    mapLvl f (SEmb e) = SEmb (mapLvl f e)
+    mapLvl _ SUni         = SUni
+    mapLvl f (SLam t)     = SLam (mapLvl f t)
+    mapLvl f (SPie a b)   = SPie (mapLvl f a) (mapLvl f b)
+    mapLvl _ SOne         = SOne
+    mapLvl _ SAst         = SAst
+    mapLvl _ SRfl         = SRfl
+    mapLvl f (SCod t)     = SCod (mapLvl f t)
+    mapLvl f (SQuo t)     = SQuo (mapLvl f t)
+    mapLvl f (SEmb e)     = SEmb (mapLvl f e)
+    mapLvl f (SEqu a t s) = SEqu (mapLvl f a) (mapLvl f t) (mapLvl f s)
 
 instance Sinkable SElim where
     mapLvl _ (SErr err)  = SErr err
+    mapLvl _ (SRgd u)    = SRgd u
     mapLvl f (SVar x)    = SVar (mapLvl f x)
     mapLvl f (SApp g t)  = SApp (mapLvl f g) (mapLvl f t)
     mapLvl f (SLet a b)  = SLet (mapLvl f a) (mapLvl f b)
@@ -183,8 +204,8 @@ instance Sinkable SElim where
 -------------------------------------------------------------------------------
 
 evalTerm :: Size ctx' -> EvalEnv ctx ctx' -> Term ctx -> VTerm ctx'
-evalTerm s env (Pie a b)   = VPie (evalTerm s env a) (Closure env b)
-evalTerm _ env (Lam t)     = VLam (Closure env t)
+evalTerm s env (Pie a b)   = VPie (evalTerm s env a) (ClosureT env b)
+evalTerm _ env (Lam t)     = VLam (ClosureT env t)
 evalTerm _ _   Uni         = VUni
 evalTerm s env (Emb e)     = vemb (evalElim s env e)
 evalTerm s env (Equ a x y) = VEqu (evalTerm s env a) (evalTerm s env x) (evalTerm s env y)
@@ -195,9 +216,9 @@ evalTerm s env (Cod t)     = VCod (evalTerm s env t)
 evalTerm s env (Quo t)     = VQuo (evalTerm s env t) (stageTerm s env t)
 
 evalElim :: Size ctx' -> EvalEnv ctx ctx' -> Elim ctx -> VElim ctx'
-evalElim _ env (Var x)   = case lookupEnv x env of BElim e _ -> e
+evalElim _ env (Var x)   = case lookupEnv x env of EvalElim e _ -> e
 evalElim s env (Ann t a) = vann (evalTerm s env t) (evalTerm s env a)
-evalElim s env (Let t r) = evalElim s (env :> BElim (evalElim s env t) Nothing) r
+evalElim s env (Let t r) = evalElim s (env :> EvalElim (evalElim s env t) (SRgd (panic "rigid in eval(let)"))) r
 evalElim s env (App f t) = vapp s (evalElim s env f) (evalTerm s env t)
 evalElim s env (Spl t)   = vspl s (evalElim s env t)
 
@@ -206,14 +227,24 @@ evalElim s env (Spl t)   = vspl s (evalElim s env t)
 -------------------------------------------------------------------------------
 
 stageTerm :: Size ctx' -> EvalEnv ctx ctx' -> Term ctx -> STerm ctx'
-stageTerm _ _ Uni = SUni
-stageTerm _ _ _ = error "stageTerm"
+stageTerm _ _   Uni         = SUni
+stageTerm _ _   One         = SOne
+stageTerm _ _   Rfl         = SRfl
+stageTerm _ _   Ast         = SAst
+stageTerm s env (Emb t)     = SEmb (stageElim s env t)
+stageTerm _ env (Lam t)     = SLam (ClosureT env t)
+stageTerm s env (Pie a b)   = SPie (stageTerm s env a) (ClosureT env b)
+stageTerm s env (Cod t)     = SCod (stageTerm s env t)
+stageTerm s env (Quo t)     = SQuo (stageTerm s env t)
+stageTerm s env (Equ a x y) = SEqu (stageTerm s env a) (stageTerm s env x) (stageTerm s env y)
 
 stageElim :: Size ctx' -> EvalEnv ctx ctx' -> Elim ctx -> SElim ctx'
 stageElim _ env (Var x) = case lookupEnv x env of
-    BElim _ Nothing  -> SErr "skolem"
-    BElim _ (Just l) -> SVar l
-stageElim _ _ _ = error "stageElim"
+    EvalElim _ e -> e
+stageElim s env (App f t)  = SApp (stageElim s env f) (stageTerm s env t)
+stageElim s env (Let e e') = SLet (stageElim s env e) (ClosureE env e')
+stageElim s env (Ann t a)  = SAnn (stageTerm s env t) (stageTerm s env a)
+stageElim s env (Spl t)    = SSpl (vspl s $ evalElim s env t) (stageElim s env t)
 
 -------------------------------------------------------------------------------
 -- * Reductions
@@ -223,8 +254,6 @@ vemb :: VElim ctx -> VTerm ctx
 vemb (VAnn t _) = t
 vemb e          = VEmb e
 
--- this reduction is not confluent, but we make more progress using
--- it -- and equate more things.
 vann :: VTerm ctx -> VTerm ctx -> VElim ctx
 vann (VEmb e) _ = e
 vann t        s = VAnn t s
@@ -232,7 +261,7 @@ vann t        s = VAnn t s
 vapp :: Size ctx -> VElim ctx -> VTerm ctx -> VElim ctx
 vapp s (VAnn (VLam closT) (VPie a closB)) r =
     let r' = vann r a
-        rb = BElim r' Nothing
+        rb = EvalElim r' (SRgd (panic "rigid in eval(vapp)"))
     in vann (run s closT rb) (run s closB rb)
 vapp s (VAnn (VEmb e) _)                  r = vapp s e r
 vapp _ (VAnn (VLam _) ty)                 _ = VErr $ "lambda annotated with " ++ show ty
@@ -255,6 +284,9 @@ vcodUni = VCod (VQuo VUni SUni)
 -- | Splice @Code@ argument: @~ (a : Code [| U |])@.
 vsplCodArg :: Size ctx -> VTerm ctx -> VTerm ctx
 vsplCodArg s a = vemb (vspl s (vann a vcodUni))
+
+panic :: String -> a
+panic s = error ("PANIC! " ++ s ++ "\nreport an issue https://github.com/phadej/debruijn")
 
 ------------------------------------------------------------------------------
 -- * Quoting (reflecting values back to terms)
@@ -283,12 +315,26 @@ quoteSpine s h (VApp sp e) = App <$> quoteSpine s h sp <*> quoteTerm s e
 quoteSpine s h (VSpl sp)   = Spl <$> quoteSpine s h sp
 
 quoteSTerm :: Natural -> Size ctx -> STerm ctx -> Either String (Term ctx)
-quoteSTerm _ _ SUni = return Uni
-quoteSTerm _ _ t = error $ "quoteSTerm " ++ show t
+quoteSTerm _ _ SUni         = return Uni
+quoteSTerm _ _ SOne         = return One
+quoteSTerm _ _ SRfl         = return Rfl
+quoteSTerm _ _ SAst         = return Ast
+quoteSTerm q s (SEmb e)     = Emb <$> quoteSElim q s e
+quoteSTerm q s (SLam t)     = Lam <$> quoteSTerm q (SS s) (srunTZ s t)
+quoteSTerm q s (SPie a b)   = Pie <$> quoteSTerm q s a <*> quoteSTerm q (SS s) (srunTZ s b)
+quoteSTerm q s (SCod t)     = Cod <$> quoteSTerm q s t
+quoteSTerm q s (SQuo t)     = Quo <$> quoteSTerm (NS q) s t
+quoteSTerm q s (SEqu a x y) = Equ <$> quoteSTerm q s a <*> quoteSTerm q s x <*> quoteSTerm q s y
 
 quoteSElim :: Natural -> Size ctx -> SElim ctx -> Either String (Elim ctx)
-quoteSElim _ s (SVar l) = pure (Var (lvlToIdx s l))
-quoteSElim _ _ e = error $ "quoteSElim " ++ show e
+quoteSElim _      _ (SErr err) = Left err
+quoteSElim _      _ (SRgd _)   = Left "trying to quote rigid variable"
+quoteSElim _      s (SVar l)   = pure (Var (lvlToIdx s l))
+quoteSElim (NS q) s (SSpl _ e) = Spl <$> quoteSElim q s e
+quoteSElim NZ     s (SSpl e _) = quoteElim s e
+quoteSElim q      s (SAnn t a) = Ann <$> quoteSTerm q s t <*> quoteSTerm q s a
+quoteSElim q      s (SApp f t) = App <$> quoteSElim q s f <*> quoteSTerm q s t
+quoteSElim q      s (SLet e f) = Let <$> quoteSElim q s e <*> quoteSElim q (SS s) (srunEZ s f)
 
 -------------------------------------------------------------------------------
 -- * Conversion checking
@@ -309,8 +355,8 @@ convBind t (ConvEnv s ts) = ConvEnv (SS s) (mapSink ts :> sink t)
 --
 -- @convTerm s Γ x y t@ checks @Γ ⊢ A ∋ x ≡ y@
 convTerm :: ConvEnv ctx -> VTerm ctx -> VTerm ctx -> VTerm ctx -> Bool
-convTerm ctx ty x y  =
-    -- traceShow ("CONV" :: String,ctx,ty,x,y) $
+convTerm ctx ty x y  = do
+    -- traceM $ "CONV: " ++ show (ctx,ty,x,y)
     convTerm' ctx ty x y
 
 -- | Typed conversion check, terms.
@@ -407,7 +453,8 @@ convSpine ctx hty = bwd [] where
 
     fwd :: VTerm ctx -> [SpinePart ctx] -> Bool
     fwd _          []              = True
-    fwd (VPie a b) (PApp x y : zs) = convTerm ctx a x y && fwd (run ctx.size b (BElim (vann x a) Nothing)) zs
+    fwd (VPie a b) (PApp x y : zs) = convTerm ctx a x y && fwd (run ctx.size b (EvalElim (vann x a) (SRgd (error "TODO")))) zs
+    fwd (VCod a)   (PSpl : zs)     = fwd (vsplCodArg ctx.size a) zs -- Apparently this cannot even happen.
     fwd _          _               = False
 
 -- /Verterbrae/
@@ -418,17 +465,31 @@ data SpinePart ctx
 
 -- | Typed conversion: syntactic terms.
 convSTerm :: ConvEnv ctx -> VTerm ctx -> STerm ctx -> STerm ctx -> Bool
-convSTerm ctx ty x y =
-    -- traceShow ("CONVS" :: String,ctx,ty,x,y) $
-    convSTerm' ctx ty x y
+convSTerm env ty x y =
+    -- traceShow ("CONVS" :: String,env,ty,x,y) $
+    convSTerm' env ty x y
 
 -- | Typed conversion: syntactic terms.
 convSTerm' :: ConvEnv ctx -> VTerm ctx -> STerm ctx -> STerm ctx -> Bool
-convSTerm' _ VUni SUni SUni = True
+convSTerm' env _          (SEmb x) (SEmb y) = convSElim env x y
+convSTerm' _   VUni       SUni     SUni     = True
+convSTerm' env (VPie a b) (SLam t) (SLam r) = do
+    convSTerm (convBind a env) (runZ env.size b) (srunTZ env.size t) (srunTZ env.size r)
 convSTerm' _ _ _ _ = False -- TODO, more checks
 
+-- | Typed conversion: syntactic eliminations.
+convSElim :: ConvEnv ctx -> SElim ctx -> SElim ctx -> Bool
+convSElim env x y =
+    -- traceShow ("CONVS" :: String,env,ty,x,y) $
+    convSElim' env x y
+
+-- | Typed conversion: syntactic eliminations.
+convSElim' :: ConvEnv ctx -> SElim ctx -> SElim ctx -> Bool
+convSElim' _ (SRgd u) (SRgd v) = u == v
+convSElim' _ _ _ = False -- TODO, more checks
+
 -------------------------------------------------------------------------------
--- Type-checking context
+-- * Type-checking context
 -------------------------------------------------------------------------------
 
 -- | Type checking ("linting") environment.
@@ -450,18 +511,32 @@ emptyLintEnv = LintEnv SZ EmptyEnv EmptyEnv EmptyEnv EmptyEnv stage0
 
 -- | Extend type checking environment with fresh variable.
 bind :: LintEnv ctx ctx' -> VTerm ctx' -> LintEnv (S ctx) (S ctx')
-bind ctx a = bind' (sinkLintEnv a ctx) (bvalZ ctx.size) (sink a)
+bind ctx a = bind' (sinkLintEnv a ctx) (evalZ ctx.size) (sink a)
 
 -- | Extend type checking environment with a known value.
-bind' :: LintEnv ctx ctx' -> BElim ctx' -> VTerm ctx' -> LintEnv (S ctx) ctx'
+bind' :: LintEnv ctx ctx' -> EvalElim ctx' -> VTerm ctx' -> LintEnv (S ctx) ctx'
 bind' (LintEnv s vs ts ts' ss cs) v t = LintEnv s (vs :> v) (ts :> t) ts' (ss :> cs) cs
 
 -------------------------------------------------------------------------------
 -- * Type-checking procedures
 -------------------------------------------------------------------------------
 
+type LintM = ExceptT String (State Rigid)
+
+newtype Rigid = Rigid Int
+  deriving (Eq, Show)
+
+newRigid :: LintM Rigid
+newRigid = lift $ do
+    r@(Rigid i) <- get
+    put $! Rigid (i + 1)
+    return r
+
+runLintM :: LintM a -> Either String a
+runLintM m = evalState (runExceptT m) (Rigid 0)
+
 -- | Checking: @Γ ⊢ B ∋ t@.
-check :: LintEnv ctx ctx' -> Term ctx -> VTerm ctx' -> Either String ()
+check :: LintEnv ctx ctx' -> Term ctx -> VTerm ctx' -> LintM ()
 check ctx (Lam t)   (VPie a b) = do
     --
     --  x : A ⊢ B ∋ t
@@ -471,7 +546,7 @@ check ctx (Lam t)   (VPie a b) = do
     let ctx' = bind ctx a
     check ctx' t (runZ ctx.size b)
 check _ctx (Lam _) ty         =
-    Left $ "lam-not-pie " ++ show ty
+    throwE $ "lam-not-pie " ++ show ty
 
 check ctx (Pie a b) VUni = do
     --
@@ -484,7 +559,7 @@ check ctx (Pie a b) VUni = do
     let ctx' = bind ctx (evalTerm ctx.size ctx.values a)
     check ctx' b VUni
 check _ctx (Pie _ _) ty =
-    Left $ "Pi-not-U " ++ show ty
+    throwE $ "Pi-not-U " ++ show ty
 
 check _ctx Uni       VUni =
     --
@@ -493,7 +568,7 @@ check _ctx Uni       VUni =
     --
     return ()
 check _ctx Uni       ty =
-    Left $ "U-not-U " ++ show ty
+    throwE $ "U-not-U " ++ show ty
 
 check ctx (Equ a x y) VUni = do
     --
@@ -507,7 +582,7 @@ check ctx (Equ a x y) VUni = do
     check ctx x a'
     check ctx y a'
 check _ctx (Equ _ _ _) ty = do
-    Left $ "Id-not-U " ++ show ty
+    throwE $ "Id-not-U " ++ show ty
 
 check ctx Rfl (VEqu a x y) = do
     --
@@ -517,9 +592,9 @@ check ctx Rfl (VEqu a x y) = do
     --
     if convTerm (ConvEnv ctx.size ctx.types') a x y
     then return ()
-    else Left $ "refl type-mismatch " ++ show (a, x, y)
+    else throwE $ "refl type-mismatch " ++ show (a, x, y)
 check _ctx Rfl         ty =
-    Left $ "refl-not-Id " ++ show ty
+    throwE $ "refl-not-Id " ++ show ty
 
 check _ One VUni = return ()
     --
@@ -527,13 +602,13 @@ check _ One VUni = return ()
     -- ------------ unit
     --  ⊢ U ∋ Unit
     --
-check _ One ty   = Left $ "1-not-U " ++ show ty
+check _ One ty   = throwE $ "1-not-U " ++ show ty
 
 check _ Ast VOne = return ()
     --
     -- ------------ value
     --  ⊢ Unit ∋ *
-check _ Ast ty   = Left $ "*-not-1 " ++ show ty
+check _ Ast ty   = throwE $ "*-not-1 " ++ show ty
 
 check ctx (Cod t) VUni = do
     --
@@ -543,7 +618,7 @@ check ctx (Cod t) VUni = do
     --
     check ctx t vcodUni
 check _ (Cod _) ty = do
-    Left $ "Cod-not-U " ++ show ty
+    throwE $ "Cod-not-U " ++ show ty
 
 check ctx (Quo t) (VCod a) = do
     --
@@ -553,7 +628,7 @@ check ctx (Quo t) (VCod a) = do
     --
     check ctx { cstage = pred ctx.cstage } t (vsplCodArg ctx.size a)
 check _ (Quo _) ty = do
-    Left $ "Quo-not-Code " ++ show ty
+    throwE $ "Quo-not-Code " ++ show ty
 
 check ctx (Emb e)   a = do
     --
@@ -565,10 +640,10 @@ check ctx (Emb e)   a = do
     b <- infer ctx e
     if convTerm (ConvEnv ctx.size ctx.types') VUni a b
     then return ()
-    else Left $ "type-mismatch " ++ show (VUni, a, b)
+    else throwE $ "type-mismatch " ++ show (VUni, a, b)
 
 -- | Inference or syntesis: @Γ ⊢ e ∈ A@
-infer :: LintEnv ctx ctx' -> Elim ctx -> Either String (VTerm ctx')
+infer :: LintEnv ctx ctx' -> Elim ctx -> LintM (VTerm ctx')
 infer ctx (Var i)   = do
     --
     --  (x : A) ∈ Γ
@@ -576,7 +651,7 @@ infer ctx (Var i)   = do
     --  Γ ⊢ x ∈ A
     --
     let s = lookupEnv i ctx.stages
-    when (s /= ctx.cstage) $ Left $ "stage mismatch " ++ show (s, ctx.cstage)
+    when (s /= ctx.cstage) $ throwE $ "stage mismatch " ++ show (s, ctx.cstage)
     return (lookupEnv i ctx.types)
 
 infer ctx (App f t) = do
@@ -591,8 +666,9 @@ infer ctx (App f t) = do
         VPie a b -> do
             check ctx t a
             let t' = evalTerm ctx.size ctx.values t
-            return (run ctx.size b (BElim (vann t' a) Nothing))
-        _ -> Left "Applying to not Pi"
+            u <- newRigid
+            return (run ctx.size b (EvalElim (vann t' a) (SRgd u)))
+        _ -> throwE "Applying to not Pi"
 
 infer ctx (Spl t) = do
     --
@@ -604,7 +680,7 @@ infer ctx (Spl t) = do
     case tt of
         VCod a -> do
             return (vsplCodArg ctx.size a)
-        _ -> Left "Splicing not Code"
+        _ -> throwE "Splicing not Code"
 
 infer ctx (Ann t a) = do
     --
@@ -627,5 +703,6 @@ infer ctx (Let t s) = do
     --
     tt <- infer ctx t
     let t' = evalElim ctx.size ctx.values t
-    let ctx' = bind' ctx (BElim t' Nothing) tt
+    u <- newRigid
+    let ctx' = bind' ctx (EvalElim t' (SRgd u)) tt
     infer ctx' s

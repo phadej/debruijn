@@ -1,30 +1,53 @@
 module Main (main) where
 
 import Test.Tasty       (TestName, TestTree, defaultMain, testGroup)
-import Test.Tasty.HUnit (assertFailure, testCaseSteps)
+import Test.Tasty.HUnit (assertFailure, testCaseSteps, (@?=))
 
 import NanoTT
 import NanoTT.Base
 
 main :: IO ()
 main = defaultMain $ testGroup "nanott"
-    [ testInfer "id"  exprId
-    , testInfer "id-spl-quo" exprIdSplQuo
-    , testInfer "quo-id" exprQuoId
-    , testInfer "refl-id-1" exprReflId1
-    , testInfer "refl-id-2" exprReflId2
-    , testInfer "refl-id-3" exprReflId3
-    , testInfer "refl-id-4" exprReflId4
+    [ testGroup "checking"
+        [ testInfer "id"  exprId
+        , testInfer "id-spl-quo" exprIdSplQuo
+        , testInfer "quo-id" exprQuoId
+        , testInfer "refl-id-1" exprReflId1
+        , testInfer "refl-id-2" exprReflId2
+        , testInfer "refl-id-3" exprReflId3
+        , testInfer "refl-id-4" exprReflId4
+        , testInfer "example-01" exprReflEx
+        , testIllTyped "example-02" exprReflExIll
+        ]
+    , testGroup "staging"
+        [ testStage "id" exprId
+        -- , testStage "spl-quo" exprIdSplQuo -- not the same, there is top-level quote
+        , testStage "quo-id" exprQuoId
+        , testStage "refl-id-1" exprReflId1
+        ]
     ]
-
 
 testInfer :: TestName -> Elim EmptyCtx -> TestTree
 testInfer name e = testCaseSteps name $ \info -> do
-    case infer emptyLintEnv e of
+    case runLintM (infer emptyLintEnv e) of
         Left err -> assertFailure err
         Right nty -> case quoteTerm SZ nty of
             Left err -> assertFailure err
             Right ty -> info $ show ty
+
+testIllTyped :: TestName -> Elim EmptyCtx -> TestTree
+testIllTyped name e = testCaseSteps name $ \info -> do
+    case runLintM (infer emptyLintEnv e) of
+        Left err  -> info err
+        Right nty -> assertFailure (show nty)
+
+testStage :: TestName -> Elim EmptyCtx -> TestTree
+testStage name e = testCaseSteps name $ \_info -> do
+    case quoteSElim NZ SZ (stageElim SZ EmptyEnv e) of
+        Left err -> assertFailure err
+        Right e' -> do
+            -- traceShowM (stageElim SZ EmptyEnv e)
+            show e' @?= show e
 
 -------------------------------------------------------------------------------
 -- Convenience operators
@@ -57,20 +80,23 @@ f @@ t = fromElim (App f t)
 typeId :: Term ctx
 typeId = Pie Uni $ Pie var0 var1
 
+-- (\ _ x ->  x) : (A : U) -> A -> A)
 exprId :: Elim ctx
 exprId = Ann
     (Lam $ Lam var0)
     typeId
 
+-- (\ _ x ->  $ [| x |]) : (A : U) -> A -> A)
 exprIdSplQuo :: Elim ctx
 exprIdSplQuo = Ann
     (Lam $ Lam $ Emb $ Spl $ Ann (Quo var0) (Cod (Quo var1)))
     typeId
 
+-- (\_ x -> x) : (A : Code [| U |]) -> Code A -> Code A
 exprQuoId :: Elim ctx
 exprQuoId = Ann
     (Lam $ Lam $ var0)
-    typeId
+    (Pie (Cod (Quo Uni)) $ Pie (Cod var0) (Cod var1))
 
 exprReflId1 :: Elim ctx
 exprReflId1 = Ann Rfl $
@@ -90,3 +116,16 @@ exprReflId4 :: Elim ctx
 exprReflId4 = Ann
     (Lam $ Emb $ Let (Ann Rfl $ Equ typeId var0 (Lam $ var1 @@ var0)) (Ann Ast One))
     (Pie typeId One)
+
+exprReflEx :: Elim ctx
+exprReflEx =
+    Let (Ann Ast One) $
+    Spl (Let (Ann Rfl (Equ (Cod (Quo One)) (Quo var0) (Quo var0))) $
+        Ann (Quo Ast) (Cod (Quo One)))
+
+exprReflExIll :: Elim ctx
+exprReflExIll =
+    Let (Ann Ast One) $
+    Let (Ann Ast One) $
+    Spl (Let (Ann Rfl (Equ (Cod (Quo One)) (Quo var0) (Quo var1))) $
+        Ann (Quo Ast) (Cod (Quo One)))
