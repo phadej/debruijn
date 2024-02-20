@@ -25,6 +25,17 @@ main = defaultMain $ testGroup "nanott"
         , testStage "quo-id" exprQuoId
         , testStage "refl-id-1" exprReflId1
         ]
+    , testGroup "conversion"
+        [ testCaseSteps "pi" $ \_ -> do
+            assertConvTerm    vcodUni (Quo $ Pie Uni Uni) (Quo $ Pie Uni Uni)
+            assertNotConvTerm vcodUni (Quo $ Pie Uni Uni) (Quo $ Pie Uni One)
+
+        , testCaseSteps "app" $ \_ -> do
+            assertConvElim exprId exprId
+            assertConvTerm vcodUni
+                (Quo $ Emb $ exprId @@ Uni @@ One)
+                (Quo $ Emb $ exprId @@ Uni @@ One)
+        ]
     ]
 
 testInfer :: TestName -> Elim EmptyCtx -> TestTree
@@ -48,6 +59,30 @@ testStage name e = testCaseSteps name $ \_info -> do
         Right e' -> do
             -- traceShowM (stageElim SZ EmptyEnv e)
             show e' @?= show e
+
+assertConvTerm :: VTerm EmptyCtx -> Term EmptyCtx -> Term EmptyCtx -> IO ()
+assertConvTerm ty t s = do
+    let t' = evalTerm SZ EmptyEnv t
+    let s' = evalTerm SZ EmptyEnv s
+    case convTerm emptyConvEnv ty t' s' of
+        Right () -> return ()
+        Left err -> assertFailure err
+
+assertNotConvTerm :: VTerm EmptyCtx -> Term EmptyCtx -> Term EmptyCtx -> IO ()
+assertNotConvTerm ty t s = do
+    let t' = evalTerm SZ EmptyEnv t
+    let s' = evalTerm SZ EmptyEnv s
+    case convTerm emptyConvEnv ty t' s' of
+        Right () -> assertFailure "convertible"
+        Left _   -> return ()
+
+assertConvElim :: Elim EmptyCtx -> Elim EmptyCtx -> IO ()
+assertConvElim t s = do
+    let t' = evalElim SZ EmptyEnv t
+    let s' = evalElim SZ EmptyEnv s
+    case convElim emptyConvEnv t' s' of
+        Right _ -> return ()
+        Left err -> assertFailure err
 
 -------------------------------------------------------------------------------
 -- Convenience operators

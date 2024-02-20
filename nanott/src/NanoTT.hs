@@ -4,6 +4,10 @@ module NanoTT where
 import Control.Monad.Trans.Class        (lift)
 import Control.Monad.Trans.Except       (ExceptT, runExceptT, throwE)
 import Control.Monad.Trans.State.Strict (State, evalState, get, put)
+import Data.IntMap (IntMap)
+
+import qualified Data.IntMap as IM
+
 import NanoTT.Base
 
 -------------------------------------------------------------------------------
@@ -130,7 +134,7 @@ data Spine ctx
 type STerm :: Ctx -> Type
 data STerm ctx where
     SUni :: STerm ctx
-    SPie :: STerm ctx -> ClosureT ctx -> STerm ctx
+    SPie :: STerm ctx -> VTerm ctx -> ClosureT ctx -> STerm ctx
     SLam :: ClosureT ctx -> STerm ctx
     SCod :: STerm ctx -> STerm ctx
     SQuo :: STerm ctx -> STerm ctx
@@ -147,7 +151,7 @@ data SElim ctx where
     SVar :: Lvl ctx -> SElim ctx
     SApp :: SElim ctx -> STerm ctx -> SElim ctx
     SSpl :: VElim ctx -> SElim ctx -> SElim ctx
-    SAnn :: STerm ctx -> STerm ctx -> SElim ctx
+    SAnn :: STerm ctx -> STerm ctx -> VTerm ctx -> SElim ctx
     SLet :: SElim ctx -> ClosureE ctx -> SElim ctx
 
 deriving instance Show (VTerm ctx)
@@ -181,7 +185,7 @@ instance Sinkable Spine where
 instance Sinkable STerm where
     mapLvl _ SUni         = SUni
     mapLvl f (SLam t)     = SLam (mapLvl f t)
-    mapLvl f (SPie a b)   = SPie (mapLvl f a) (mapLvl f b)
+    mapLvl f (SPie a v b) = SPie (mapLvl f a) (mapLvl f v) (mapLvl f b)
     mapLvl _ SOne         = SOne
     mapLvl _ SAst         = SAst
     mapLvl _ SRfl         = SRfl
@@ -196,8 +200,8 @@ instance Sinkable SElim where
     mapLvl f (SVar x)    = SVar (mapLvl f x)
     mapLvl f (SApp g t)  = SApp (mapLvl f g) (mapLvl f t)
     mapLvl f (SLet a b)  = SLet (mapLvl f a) (mapLvl f b)
-    mapLvl f (SAnn t s)  = SAnn (mapLvl f t) (mapLvl f s)
-    mapLvl f (SSpl e e') = SSpl (mapLvl f e) (mapLvl f e')
+    mapLvl f (SAnn t s v) = SAnn (mapLvl f t) (mapLvl f s) (mapLvl f v)
+    mapLvl f (SSpl e e')  = SSpl (mapLvl f e) (mapLvl f e')
 
 -------------------------------------------------------------------------------
 -- * Evaluation
@@ -233,7 +237,7 @@ stageTerm _ _   Rfl         = SRfl
 stageTerm _ _   Ast         = SAst
 stageTerm s env (Emb t)     = SEmb (stageElim s env t)
 stageTerm _ env (Lam t)     = SLam (ClosureT env t)
-stageTerm s env (Pie a b)   = SPie (stageTerm s env a) (ClosureT env b)
+stageTerm s env (Pie a b)   = SPie (stageTerm s env a) (evalTerm s env a) (ClosureT env b)
 stageTerm s env (Cod t)     = SCod (stageTerm s env t)
 stageTerm s env (Quo t)     = SQuo (stageTerm s env t)
 stageTerm s env (Equ a x y) = SEqu (stageTerm s env a) (stageTerm s env x) (stageTerm s env y)
@@ -243,7 +247,7 @@ stageElim _ env (Var x) = case lookupEnv x env of
     EvalElim _ e -> e
 stageElim s env (App f t)  = SApp (stageElim s env f) (stageTerm s env t)
 stageElim s env (Let e e') = SLet (stageElim s env e) (ClosureE env e')
-stageElim s env (Ann t a)  = SAnn (stageTerm s env t) (stageTerm s env a)
+stageElim s env (Ann t a)  = SAnn (stageTerm s env t) (stageTerm s env a) (evalTerm s env a)
 stageElim s env (Spl t)    = SSpl (vspl s $ evalElim s env t) (stageElim s env t)
 
 -------------------------------------------------------------------------------
@@ -321,20 +325,20 @@ quoteSTerm _ _ SRfl         = return Rfl
 quoteSTerm _ _ SAst         = return Ast
 quoteSTerm q s (SEmb e)     = Emb <$> quoteSElim q s e
 quoteSTerm q s (SLam t)     = Lam <$> quoteSTerm q (SS s) (srunTZ s t)
-quoteSTerm q s (SPie a b)   = Pie <$> quoteSTerm q s a <*> quoteSTerm q (SS s) (srunTZ s b)
+quoteSTerm q s (SPie a _ b) = Pie <$> quoteSTerm q s a <*> quoteSTerm q (SS s) (srunTZ s b)
 quoteSTerm q s (SCod t)     = Cod <$> quoteSTerm q s t
 quoteSTerm q s (SQuo t)     = Quo <$> quoteSTerm (NS q) s t
 quoteSTerm q s (SEqu a x y) = Equ <$> quoteSTerm q s a <*> quoteSTerm q s x <*> quoteSTerm q s y
 
 quoteSElim :: Natural -> Size ctx -> SElim ctx -> Either String (Elim ctx)
-quoteSElim _      _ (SErr err) = Left err
-quoteSElim _      _ (SRgd _)   = Left "trying to quote rigid variable"
-quoteSElim _      s (SVar l)   = pure (Var (lvlToIdx s l))
-quoteSElim (NS q) s (SSpl _ e) = Spl <$> quoteSElim q s e
-quoteSElim NZ     s (SSpl e _) = quoteElim s e
-quoteSElim q      s (SAnn t a) = Ann <$> quoteSTerm q s t <*> quoteSTerm q s a
-quoteSElim q      s (SApp f t) = App <$> quoteSElim q s f <*> quoteSTerm q s t
-quoteSElim q      s (SLet e f) = Let <$> quoteSElim q s e <*> quoteSElim q (SS s) (srunEZ s f)
+quoteSElim _      _ (SErr err)   = Left err
+quoteSElim _      _ (SRgd _)     = Left "trying to quote rigid variable"
+quoteSElim _      s (SVar l)     = pure (Var (lvlToIdx s l))
+quoteSElim (NS q) s (SSpl _ e)   = Spl <$> quoteSElim q s e
+quoteSElim NZ     s (SSpl e _)   = quoteElim s e
+quoteSElim q      s (SAnn t a _) = Ann <$> quoteSTerm q s t <*> quoteSTerm q s a
+quoteSElim q      s (SApp f t)   = App <$> quoteSElim q s f <*> quoteSTerm q s t
+quoteSElim q      s (SLet e f)   = Let <$> quoteSElim q s e <*> quoteSElim q (SS s) (srunEZ s f)
 
 -------------------------------------------------------------------------------
 -- * Conversion checking
@@ -344,23 +348,31 @@ quoteSElim q      s (SLet e f) = Let <$> quoteSElim q s e <*> quoteSElim q (SS s
 data ConvEnv ctx = ConvEnv
     { size   :: Size ctx
     , types  :: Env ctx (VTerm ctx)
+    , rigids :: RigidMap (VTerm ctx)
     }
   deriving Show
 
+-- | Empty conversion environment.
+emptyConvEnv :: ConvEnv EmptyCtx
+emptyConvEnv = ConvEnv SZ EmptyEnv (RigidMap IM.empty)
+
 -- | Extend conversion environment.
 convBind :: VTerm ctx -> ConvEnv ctx -> ConvEnv (S ctx)
-convBind t (ConvEnv s ts) = ConvEnv (SS s) (mapSink ts :> sink t)
+convBind t (ConvEnv s ts rs) = ConvEnv (SS s) (mapSink ts :> sink t) (mapSink rs)
+
+notConvertible :: Show a => a -> a -> Either String r
+notConvertible t s = Left $ show (t, s)
 
 -- | Typed conversion check.
 --
 -- @convTerm s Γ x y t@ checks @Γ ⊢ A ∋ x ≡ y@
-convTerm :: ConvEnv ctx -> VTerm ctx -> VTerm ctx -> VTerm ctx -> Bool
+convTerm :: ConvEnv ctx -> VTerm ctx -> VTerm ctx -> VTerm ctx -> Either String ()
 convTerm ctx ty x y  = do
     -- traceM $ "CONV: " ++ show (ctx,ty,x,y)
     convTerm' ctx ty x y
 
 -- | Typed conversion check, terms.
-convTerm' :: ConvEnv ctx -> VTerm ctx -> VTerm ctx -> VTerm ctx -> Bool
+convTerm' :: ConvEnv ctx -> VTerm ctx -> VTerm ctx -> VTerm ctx -> Either String ()
 --
 -- -------------
 --  ⊢ U ∋ U ≡ U
@@ -383,18 +395,18 @@ convTerm' :: ConvEnv ctx -> VTerm ctx -> VTerm ctx -> VTerm ctx -> Bool
 -- -----------------------------------------------
 --        ⊢ U ∋ (Π (x : A) → B) ≡ (Π (x : C) → D)
 --
-convTerm' _   VUni         VUni            VUni            = True
-convTerm' _   VUni         VOne            VOne            = True
-convTerm' ctx VUni         (VEqu a1 x1 y1) (VEqu a2 x2 y2) = convTerm ctx a1 a2 VUni && convTerm ctx a1 x1 x2 && convTerm ctx a1 y1 y2
+convTerm' _   VUni         VUni            VUni            = return ()
+convTerm' _   VUni         VOne            VOne            = return ()
+convTerm' ctx VUni         (VEqu a1 x1 y1) (VEqu a2 x2 y2) = convTerm ctx a1 a2 VUni >> convTerm ctx a1 x1 x2 >> convTerm ctx a1 y1 y2
 convTerm' ctx VUni         (VCod x)        (VCod y)        = convTerm ctx vcodUni x y
-convTerm' ctx VUni         (VPie a1 b1)    (VPie a2 b2)    = convTerm ctx VUni a1 a2 && convTerm (convBind a1 ctx) VUni (runZ ctx.size b1) (runZ ctx.size b2)
+convTerm' ctx VUni         (VPie a1 b1)    (VPie a2 b2)    = convTerm ctx VUni a1 a2 >> convTerm (convBind a1 ctx) VUni (runZ ctx.size b1) (runZ ctx.size b2)
 convTerm' ctx VUni         (VEmb x)        (VEmb y)        = convElim ctx x y
-convTerm' _   VUni         _               _               = False
+convTerm' _   VUni         x               y               = notConvertible x y
 
 -- ⊢ 1        ∋ t ≡ s
 -- ⊢ Id A x y ∋ t ≡ s
-convTerm' _   VOne         _               _               = True
-convTerm' _   (VEqu _ _ _) _               _               = True
+convTerm' _   VOne         _               _               = return ()
+convTerm' _   (VEqu _ _ _) _               _               = return ()
 
 --
 --- ⊢ ~ (A : Code [| U |]) ∋ t ≡^0 s
@@ -402,7 +414,7 @@ convTerm' _   (VEqu _ _ _) _               _               = True
 --  ⊢ Code A ∋ [| t |] ≡ [| s |]
 convTerm' ctx (VCod a)     (VQuo _ x)      (VQuo _ y)      = convSTerm ctx (vsplCodArg ctx.size a) x y
 convTerm' ctx (VCod _)     (VEmb x)        (VEmb y)        = convElim ctx x y
-convTerm' _   (VCod _)     _               _               = False
+convTerm' _   (VCod _)     x               y               = notConvertible x y
 
 --  x : A ⊢ B ∋ t ≡ s
 -- -------------------------------------------------
@@ -416,46 +428,48 @@ convTerm' ctx (VPie a b)   (VLam x)        (VLam y)        = convTerm (convBind 
 convTerm' ctx (VPie a b)   (VLam x)        (VEmb y)        = convTerm (convBind a ctx) (runZ ctx.size b) (runZ ctx.size x)   (etaLam ctx.size y)
 convTerm' ctx (VPie a b)   (VEmb x)        (VLam y)        = convTerm (convBind a ctx) (runZ ctx.size b) (etaLam ctx.size x) (runZ ctx.size y)
 convTerm' ctx (VPie _ _)   (VEmb x)        (VEmb y)        = convElim ctx x y
-convTerm' _   (VPie _ _)   _               _               = False
+convTerm' _   (VPie _ _)   x               y               = notConvertible x y
 
-convTerm' _   (VLam _)     _               _               = False
-convTerm' _   (VQuo _ _)   _               _               = False
-convTerm' _   VAst         _               _               = False
-convTerm' _   VRfl         _               _               = False
+convTerm' _   (VLam _)     _               _               = Left "type Lam"
+convTerm' _   (VQuo _ _)   _               _               = Left "type Quo"
+convTerm' _   VAst         _               _               = Left "type Ast"
+convTerm' _   VRfl         _               _               = Left "type Rfl"
 
 convTerm' ctx (VEmb (VAnn t _)) x y = convTerm' ctx t x y
-convTerm' _   (VEmb (VErr _))   _ _ = False
+convTerm' _   (VEmb (VErr err)) _ _ = Left err
 
 -- Only neutral terms can be convertible under neutral type
 convTerm' ctx (VEmb (VNeu _ _)) (VEmb x) (VEmb y) = convElim ctx x y
-convTerm' _   (VEmb _)          _        _        = False
+convTerm' _   (VEmb _)          _        _        = Left "emb-ann?"
 
 -- | Eta expand value of function type.
 etaLam :: Size ctx -> VElim ctx -> VTerm (S ctx)
 etaLam s f = vemb (vapp (SS s) (sink f) (vemb (valZ s)))
 
 -- | Typed conversion check, eliminations.
-convElim :: ConvEnv ctx -> VElim ctx -> VElim ctx -> Bool
+convElim :: ConvEnv ctx -> VElim ctx -> VElim ctx -> Either String ()
 -- annotated terms: drop annotations.
 convElim ctx (VAnn t ty)   e             = convTerm ctx ty t (vemb e)
 convElim ctx e             (VAnn t ty)   = convTerm ctx ty (vemb e) t
-convElim ctx (VNeu h1 sp1) (VNeu h2 sp2) = h1 == h2 && convSpine ctx (lookupEnv (lvlToIdx ctx.size h1) ctx.types) sp1 sp2
-convElim _   _             _             = False
+convElim ctx (VNeu h1 sp1) (VNeu h2 sp2) = do
+    unless (h1 == h2) $ notConvertible h1 h2
+    convSpine ctx (lookupEnv (lvlToIdx ctx.size h1) ctx.types) sp1 sp2
+convElim _   x             y             = notConvertible x y
 
 -- | Typed conversion check: spines.
-convSpine :: forall ctx. ConvEnv ctx -> VTerm ctx -> Spine ctx -> Spine ctx -> Bool
+convSpine :: forall ctx. ConvEnv ctx -> VTerm ctx -> Spine ctx -> Spine ctx -> Either String ()
 convSpine ctx hty = bwd [] where
-    bwd :: [SpinePart ctx] -> Spine ctx -> Spine ctx -> Bool
+    bwd :: [SpinePart ctx] -> Spine ctx -> Spine ctx -> Either String ()
     bwd acc (VApp xs x) (VApp ys y) = bwd (PApp x y : acc) xs ys
     bwd acc (VSpl xs)   (VSpl ys)   = bwd (PSpl : acc) xs ys
     bwd acc VNil        VNil        = fwd hty acc
-    bwd _   _           _           = False
+    bwd _   _           _           = Left "non-matching spine"
 
-    fwd :: VTerm ctx -> [SpinePart ctx] -> Bool
-    fwd _          []              = True
-    fwd (VPie a b) (PApp x y : zs) = convTerm ctx a x y && fwd (run ctx.size b (EvalElim (vann x a) (SRgd (error "TODO")))) zs
+    fwd :: VTerm ctx -> [SpinePart ctx] -> Either String ()
+    fwd _          []              = Right ()
+    fwd (VPie a b) (PApp x y : zs) = convTerm ctx a x y >> fwd (run ctx.size b (EvalElim (vann x a) (SRgd (error "TODO")))) zs
     fwd (VCod a)   (PSpl : zs)     = fwd (vsplCodArg ctx.size a) zs -- Apparently this cannot even happen.
-    fwd _          _               = False
+    fwd _          _               = Left "wrong type spine"
 
 -- /Verterbrae/
 data SpinePart ctx
@@ -464,29 +478,36 @@ data SpinePart ctx
   deriving Show
 
 -- | Typed conversion: syntactic terms.
-convSTerm :: ConvEnv ctx -> VTerm ctx -> STerm ctx -> STerm ctx -> Bool
+convSTerm :: ConvEnv ctx -> VTerm ctx -> STerm ctx -> STerm ctx -> Either String ()
 convSTerm env ty x y =
     -- traceShow ("CONVS" :: String,env,ty,x,y) $
     convSTerm' env ty x y
 
 -- | Typed conversion: syntactic terms.
-convSTerm' :: ConvEnv ctx -> VTerm ctx -> STerm ctx -> STerm ctx -> Bool
-convSTerm' env _          (SEmb x) (SEmb y) = convSElim env x y
-convSTerm' _   VUni       SUni     SUni     = True
+convSTerm' :: ConvEnv ctx -> VTerm ctx -> STerm ctx -> STerm ctx -> Either String ()
+convSTerm' env _          (SEmb x) (SEmb y) = void $ convSElim env x y
+convSTerm' _   VUni       SUni     SUni     = return ()
+convSTerm' env VUni       (SPie a1 a b1) (SPie a2 _ b2) = do
+    convSTerm env VUni a1 a2
+    convSTerm (convBind a env) VUni (srunTZ env.size b1) (srunTZ env.size b2)
 convSTerm' env (VPie a b) (SLam t) (SLam r) = do
     convSTerm (convBind a env) (runZ env.size b) (srunTZ env.size t) (srunTZ env.size r)
-convSTerm' _ _ _ _ = False -- TODO, more checks
+convSTerm' _ _ x y = notConvertible x y -- TODO, more checks
 
 -- | Typed conversion: syntactic eliminations.
-convSElim :: ConvEnv ctx -> SElim ctx -> SElim ctx -> Bool
+convSElim :: ConvEnv ctx -> SElim ctx -> SElim ctx -> Either String (VTerm ctx)
 convSElim env x y =
     -- traceShow ("CONVS" :: String,env,ty,x,y) $
     convSElim' env x y
 
 -- | Typed conversion: syntactic eliminations.
-convSElim' :: ConvEnv ctx -> SElim ctx -> SElim ctx -> Bool
-convSElim' _ (SRgd u) (SRgd v) = u == v
-convSElim' _ _ _ = False -- TODO, more checks
+convSElim' :: ConvEnv ctx -> SElim ctx -> SElim ctx -> Either String (VTerm ctx)
+convSElim' env (SRgd u) (SRgd v) = do
+    unless (u == v) $ notConvertible u v
+    case lookupRigid u env.rigids of
+        Nothing -> Left "unbound rigid"
+        Just ty -> return ty
+convSElim' _ x y = notConvertible x y -- TODO, more checks
 
 -------------------------------------------------------------------------------
 -- * Type-checking context
@@ -500,14 +521,15 @@ data LintEnv ctx ctx' = LintEnv
     , types' :: Env ctx' (VTerm ctx')
     , stages :: Env ctx Stage
     , cstage :: Stage
+    , rigids :: RigidMap (VTerm ctx')
     }
 
 sinkLintEnv :: VTerm ctx' -> LintEnv ctx ctx' -> LintEnv ctx (S ctx')
-sinkLintEnv t' (LintEnv s vs ts ts' ss cs) = LintEnv (SS s) (mapSink vs) (mapSink ts) (mapSink ts' :> sink t') ss cs
+sinkLintEnv t' (LintEnv s vs ts ts' ss cs rs) = LintEnv (SS s) (mapSink vs) (mapSink ts) (mapSink ts' :> sink t') ss cs (mapSink rs)
 
 -- | Empty type checking environemnt.
 emptyLintEnv :: LintEnv EmptyCtx EmptyCtx
-emptyLintEnv = LintEnv SZ EmptyEnv EmptyEnv EmptyEnv EmptyEnv stage0
+emptyLintEnv = LintEnv SZ EmptyEnv EmptyEnv EmptyEnv EmptyEnv stage0 (RigidMap IM.empty)
 
 -- | Extend type checking environment with fresh variable.
 bind :: LintEnv ctx ctx' -> VTerm ctx' -> LintEnv (S ctx) (S ctx')
@@ -515,7 +537,7 @@ bind ctx a = bind' (sinkLintEnv a ctx) (evalZ ctx.size) (sink a)
 
 -- | Extend type checking environment with a known value.
 bind' :: LintEnv ctx ctx' -> EvalElim ctx' -> VTerm ctx' -> LintEnv (S ctx) ctx'
-bind' (LintEnv s vs ts ts' ss cs) v t = LintEnv s (vs :> v) (ts :> t) ts' (ss :> cs) cs
+bind' (LintEnv s vs ts ts' ss cs rs) v t = LintEnv s (vs :> v) (ts :> t) ts' (ss :> cs) cs rs
 
 -------------------------------------------------------------------------------
 -- * Type-checking procedures
@@ -523,14 +545,24 @@ bind' (LintEnv s vs ts ts' ss cs) v t = LintEnv s (vs :> v) (ts :> t) ts' (ss :>
 
 type LintM = ExceptT String (State Rigid)
 
+-- TODO: index by context?
 newtype Rigid = Rigid Int
   deriving (Eq, Show)
 
-newRigid :: LintM Rigid
-newRigid = lift $ do
+newtype RigidMap v = RigidMap (IntMap v)
+  deriving (Eq, Show, Functor)
+
+lookupRigid :: Rigid -> RigidMap v -> Maybe v
+lookupRigid (Rigid k) (RigidMap m) = IM.lookup k m
+
+insertRigid :: Rigid -> v -> RigidMap v -> RigidMap v
+insertRigid (Rigid k) v (RigidMap m) = RigidMap (IM.insert k v m)
+
+newRigid :: LintEnv ctx ctx' -> VTerm ctx' -> LintM (LintEnv ctx ctx', Rigid)
+newRigid env ty = lift $ do
     r@(Rigid i) <- get
     put $! Rigid (i + 1)
-    return r
+    return (env { rigids = insertRigid r ty env.rigids }, r)
 
 runLintM :: LintM a -> Either String a
 runLintM m = evalState (runExceptT m) (Rigid 0)
@@ -590,9 +622,10 @@ check ctx Rfl (VEqu a x y) = do
     -- ------------------- refl
     --  ⊢ Id A t s ∋ refl
     --
-    if convTerm (ConvEnv ctx.size ctx.types') a x y
-    then return ()
-    else throwE $ "refl type-mismatch " ++ show (a, x, y)
+    case convTerm (ConvEnv ctx.size ctx.types' ctx.rigids) a x y of
+        Right () -> return ()
+        Left err -> throwE $ "refl type-mismatch " ++ show (a, x, y) ++ err
+
 check _ctx Rfl         ty =
     throwE $ "refl-not-Id " ++ show ty
 
@@ -638,9 +671,9 @@ check ctx (Emb e)   a = do
     --  ⊢ A ∋ e
     --
     b <- infer ctx e
-    if convTerm (ConvEnv ctx.size ctx.types') VUni a b
-    then return ()
-    else throwE $ "type-mismatch " ++ show (VUni, a, b)
+    case convTerm (ConvEnv ctx.size ctx.types' ctx.rigids) VUni a b of
+        Right () -> return ()
+        Left err -> throwE $ "type-mismatch " ++ show (VUni, a, b) ++ err
 
 -- | Inference or syntesis: @Γ ⊢ e ∈ A@
 infer :: LintEnv ctx ctx' -> Elim ctx -> LintM (VTerm ctx')
@@ -666,7 +699,7 @@ infer ctx (App f t) = do
         VPie a b -> do
             check ctx t a
             let t' = evalTerm ctx.size ctx.values t
-            u <- newRigid
+            (_, u) <- newRigid ctx t'
             return (run ctx.size b (EvalElim (vann t' a) (SRgd u)))
         _ -> throwE "Applying to not Pi"
 
@@ -703,6 +736,6 @@ infer ctx (Let t s) = do
     --
     tt <- infer ctx t
     let t' = evalElim ctx.size ctx.values t
-    u <- newRigid
-    let ctx' = bind' ctx (EvalElim t' (SRgd u)) tt
-    infer ctx' s
+    (ctx', u) <- newRigid ctx tt
+    let ctx'' = bind' ctx' (EvalElim t' (SRgd u)) tt
+    infer ctx'' s
