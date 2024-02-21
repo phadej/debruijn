@@ -149,7 +149,7 @@ data SElim ctx where
     SErr :: String -> SElim ctx
     SRgd :: Rigid -> SElim ctx
     SVar :: Lvl ctx -> SElim ctx
-    SApp :: SElim ctx -> STerm ctx -> SElim ctx
+    SApp :: SElim ctx -> STerm ctx -> VTerm ctx -> SElim ctx
     SSpl :: VElim ctx -> SElim ctx -> SElim ctx
     SAnn :: STerm ctx -> STerm ctx -> VTerm ctx -> SElim ctx
     SLet :: SElim ctx -> ClosureE ctx -> SElim ctx
@@ -195,11 +195,11 @@ instance Sinkable STerm where
     mapLvl f (SEqu a t s) = SEqu (mapLvl f a) (mapLvl f t) (mapLvl f s)
 
 instance Sinkable SElim where
-    mapLvl _ (SErr err)  = SErr err
-    mapLvl _ (SRgd u)    = SRgd u
-    mapLvl f (SVar x)    = SVar (mapLvl f x)
-    mapLvl f (SApp g t)  = SApp (mapLvl f g) (mapLvl f t)
-    mapLvl f (SLet a b)  = SLet (mapLvl f a) (mapLvl f b)
+    mapLvl _ (SErr err)   = SErr err
+    mapLvl _ (SRgd u)     = SRgd u
+    mapLvl f (SVar x)     = SVar (mapLvl f x)
+    mapLvl f (SApp g t v) = SApp (mapLvl f g) (mapLvl f t) (mapLvl f v)
+    mapLvl f (SLet a b)   = SLet (mapLvl f a) (mapLvl f b)
     mapLvl f (SAnn t s v) = SAnn (mapLvl f t) (mapLvl f s) (mapLvl f v)
     mapLvl f (SSpl e e')  = SSpl (mapLvl f e) (mapLvl f e')
 
@@ -245,7 +245,7 @@ stageTerm s env (Equ a x y) = SEqu (stageTerm s env a) (stageTerm s env x) (stag
 stageElim :: Size ctx' -> EvalEnv ctx ctx' -> Elim ctx -> SElim ctx'
 stageElim _ env (Var x) = case lookupEnv x env of
     EvalElim _ e -> e
-stageElim s env (App f t)  = SApp (stageElim s env f) (stageTerm s env t)
+stageElim s env (App f t)  = SApp (stageElim s env f) (stageTerm s env t) (evalTerm s env t)
 stageElim s env (Let e e') = SLet (stageElim s env e) (ClosureE env e')
 stageElim s env (Ann t a)  = SAnn (stageTerm s env t) (stageTerm s env a) (evalTerm s env a)
 stageElim s env (Spl t)    = SSpl (vspl s $ evalElim s env t) (stageElim s env t)
@@ -337,7 +337,7 @@ quoteSElim _      s (SVar l)     = pure (Var (lvlToIdx s l))
 quoteSElim (NS q) s (SSpl _ e)   = Spl <$> quoteSElim q s e
 quoteSElim NZ     s (SSpl e _)   = quoteElim s e
 quoteSElim q      s (SAnn t a _) = Ann <$> quoteSTerm q s t <*> quoteSTerm q s a
-quoteSElim q      s (SApp f t)   = App <$> quoteSElim q s f <*> quoteSTerm q s t
+quoteSElim q      s (SApp f t _) = App <$> quoteSElim q s f <*> quoteSTerm q s t
 quoteSElim q      s (SLet e f)   = Let <$> quoteSElim q s e <*> quoteSElim q (SS s) (srunEZ s f)
 
 -------------------------------------------------------------------------------
@@ -485,11 +485,13 @@ convSTerm env ty x y =
 
 -- | Typed conversion: syntactic terms.
 convSTerm' :: ConvEnv ctx -> VTerm ctx -> STerm ctx -> STerm ctx -> Either String ()
-convSTerm' env _          (SEmb x) (SEmb y) = void $ convSElim env x y
-convSTerm' _   VUni       SUni     SUni     = return ()
+convSTerm' env _          (SEmb x)       (SEmb y)       = void $ convSElim env x y
+convSTerm' _   VUni       SUni           SUni           = return ()
+convSTerm' _   VUni       SOne           SOne           = return ()
 convSTerm' env VUni       (SPie a1 a b1) (SPie a2 _ b2) = do
     convSTerm env VUni a1 a2
     convSTerm (convBind a env) VUni (srunTZ env.size b1) (srunTZ env.size b2)
+
 convSTerm' env (VPie a b) (SLam t) (SLam r) = do
     convSTerm (convBind a env) (runZ env.size b) (srunTZ env.size t) (srunTZ env.size r)
 convSTerm' _ _ x y = notConvertible x y -- TODO, more checks
@@ -507,6 +509,20 @@ convSElim' env (SRgd u) (SRgd v) = do
     case lookupRigid u env.rigids of
         Nothing -> Left "unbound rigid"
         Just ty -> return ty
+convSElim' env (SVar x) (SVar y) = do
+    unless (x == y) $ notConvertible x y
+    return $ lookupEnv (lvlToIdx env.size x) env.types
+convSElim' env (SAnn t a v)  (SAnn s b _) = do
+    convSTerm env VUni a b
+    convSTerm env v    t s
+    return v
+convSElim' env (SApp f t t') (SApp g s _) = do
+    ty <- convSElim' env f g
+    case ty of
+        VPie a b -> do
+            convSTerm env a t s
+            return (run env.size b (EvalElim (vann t' a) (SRgd (error "TODO"))))
+        _ -> Left "SApp head is not Pi"
 convSElim' _ x y = notConvertible x y -- TODO, more checks
 
 -------------------------------------------------------------------------------
