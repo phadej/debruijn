@@ -715,8 +715,7 @@ infer ctx (App f t) = do
         VPie a b -> do
             check ctx t a
             let t' = evalTerm ctx.size ctx.values t
-            (_, u) <- newRigid ctx t'
-            return (run ctx.size b (EvalElim (vann t' a) (SRgd u)))
+            return (run ctx.size b (EvalElim (vann t' a) (SRgd (error "not needed"))))
         _ -> throwE "Applying to not Pi"
 
 infer ctx (Spl t) = do
