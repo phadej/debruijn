@@ -440,7 +440,7 @@ convTerm' _   (VEmb (VErr err)) _ _ = Left err
 
 -- Only neutral terms can be convertible under neutral type
 convTerm' ctx (VEmb (VNeu _ _)) (VEmb x) (VEmb y) = convElim ctx x y
-convTerm' _   (VEmb _)          _        _        = Left "emb-ann?"
+convTerm' _   (VEmb (VNeu _ _)) x        y        = notConvertible x y
 
 -- | Eta expand value of function type.
 etaLam :: Size ctx -> VElim ctx -> VTerm (S ctx)
@@ -488,13 +488,30 @@ convSTerm' :: ConvEnv ctx -> VTerm ctx -> STerm ctx -> STerm ctx -> Either Strin
 convSTerm' env _          (SEmb x)       (SEmb y)       = void $ convSElim env x y
 convSTerm' _   VUni       SUni           SUni           = return ()
 convSTerm' _   VUni       SOne           SOne           = return ()
+convSTerm' _   VUni       (SEqu _ _ _)   (SEqu _ _ _)   = error "TODO"
+convSTerm' _   VUni       (SCod _)       (SCod _)       = error "TODO"
 convSTerm' env VUni       (SPie a1 a b1) (SPie a2 _ b2) = do
     convSTerm env VUni a1 a2
     convSTerm (convBind a env) VUni (srunTZ env.size b1) (srunTZ env.size b2)
+convSTerm' _   VUni       x              y              = notConvertible x y
+
+convSTerm' env VOne         x y = error "TODO" env x y
+convSTerm' env (VEqu _ _ _) x y = error "TODO" env x y
+
+convSTerm' env (VCod a) x y = error "TODO" env a x y
 
 convSTerm' env (VPie a b) (SLam t) (SLam r) = do
     convSTerm (convBind a env) (runZ env.size b) (srunTZ env.size t) (srunTZ env.size r)
-convSTerm' _ _ x y = notConvertible x y -- TODO, more checks
+convSTerm' _   (VPie _ _) x        y        = notConvertible x y
+
+convSTerm' _   (VLam _)   x y = notConvertible x y
+convSTerm' _   (VQuo _ _) x y = notConvertible x y
+convSTerm' _   VAst       x y = notConvertible x y
+convSTerm' _   VRfl       x y = notConvertible x y
+
+convSTerm' env (VEmb (VAnn t _)) x y = convSTerm' env t x y
+convSTerm' _   (VEmb (VErr err)) _ _ = Left err
+convSTerm' _   (VEmb (VNeu _ _)) x y = error "TODO" x y
 
 -- | Typed conversion: syntactic eliminations.
 convSElim :: ConvEnv ctx -> SElim ctx -> SElim ctx -> Either String (VTerm ctx)
@@ -504,6 +521,7 @@ convSElim env x y =
 
 -- | Typed conversion: syntactic eliminations.
 convSElim' :: ConvEnv ctx -> SElim ctx -> SElim ctx -> Either String (VTerm ctx)
+convSElim' _   (SErr err) _ = Left err
 convSElim' env (SRgd u) (SRgd v) = do
     unless (u == v) $ notConvertible u v
     case lookupRigid u env.rigids of
@@ -523,7 +541,15 @@ convSElim' env (SApp f t t') (SApp g s _) = do
             convSTerm env a t s
             return (run env.size b (EvalElim (vann t' a) (SRgd (error "TODO"))))
         _ -> Left "SApp head is not Pi"
-convSElim' _ x y = notConvertible x y -- TODO, more checks
+convSElim' env (SSpl _ _) (SSpl _ _) = error "TODO" env
+convSElim' env (SLet _ _) (SLet _ _) = error "TODO" env
+
+convSElim' _ x@(SRgd _)     y = notConvertible x y
+convSElim' _ x@(SVar _)     y = notConvertible x y
+convSElim' _ x@(SAnn _ _ _) y = notConvertible x y
+convSElim' _ x@(SApp _ _ _) y = notConvertible x y
+convSElim' _ x@(SSpl _ _)   y = notConvertible x y
+convSElim' _ x@(SLet _ _)   y = notConvertible x y
 
 -------------------------------------------------------------------------------
 -- * Type-checking context
