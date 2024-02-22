@@ -147,7 +147,7 @@ data STerm ctx where
 type SElim :: Ctx -> Type
 data SElim ctx where
     SErr :: String -> SElim ctx
-    SRgd :: Rigid -> SElim ctx
+    SRgd :: Rigid ctx -> SElim ctx
     SVar :: Lvl ctx -> SElim ctx
     SApp :: SElim ctx -> STerm ctx -> VTerm ctx -> SElim ctx
     SSpl :: VElim ctx -> SElim ctx -> SElim ctx
@@ -196,7 +196,7 @@ instance Sinkable STerm where
 
 instance Sinkable SElim where
     mapLvl _ (SErr err)   = SErr err
-    mapLvl _ (SRgd u)     = SRgd u
+    mapLvl f (SRgd u)     = SRgd (mapLvl f u)
     mapLvl f (SVar x)     = SVar (mapLvl f x)
     mapLvl f (SApp g t v) = SApp (mapLvl f g) (mapLvl f t) (mapLvl f v)
     mapLvl f (SLet a b)   = SLet (mapLvl f a) (mapLvl f b)
@@ -348,7 +348,7 @@ quoteSElim q      s (SLet e f)   = Let <$> quoteSElim q s e <*> quoteSElim q (SS
 data ConvEnv ctx = ConvEnv
     { size   :: Size ctx
     , types  :: Env ctx (VTerm ctx)
-    , rigids :: RigidMap (VTerm ctx)
+    , rigids :: RigidMap ctx (VTerm ctx)
     }
   deriving Show
 
@@ -358,7 +358,7 @@ emptyConvEnv = ConvEnv SZ EmptyEnv (RigidMap IM.empty)
 
 -- | Extend conversion environment.
 convBind :: VTerm ctx -> ConvEnv ctx -> ConvEnv (S ctx)
-convBind t (ConvEnv s ts rs) = ConvEnv (SS s) (mapSink ts :> sink t) (mapSink rs)
+convBind t (ConvEnv s ts rs) = ConvEnv (SS s) (mapSink ts :> sink t) (sinkRigidMap (mapSink rs))
 
 notConvertible :: Show a => a -> a -> Either String r
 notConvertible t s = Left $ show (t, s)
@@ -524,7 +524,7 @@ convSElim' :: ConvEnv ctx -> SElim ctx -> SElim ctx -> Either String (VTerm ctx)
 convSElim' _   (SErr err) _ = Left err
 convSElim' env (SRgd u) (SRgd v) = do
     unless (u == v) $ notConvertible u v
-    case lookupRigid u env.rigids of
+    case lookupRigidMap u env.rigids of
         Nothing -> Left "unbound rigid"
         Just ty -> return ty
 convSElim' env (SVar x) (SVar y) = do
@@ -563,11 +563,11 @@ data LintEnv ctx ctx' = LintEnv
     , types' :: Env ctx' (VTerm ctx')
     , stages :: Env ctx Stage
     , cstage :: Stage
-    , rigids :: RigidMap (VTerm ctx')
+    , rigids :: RigidMap ctx' (VTerm ctx')
     }
 
 sinkLintEnv :: VTerm ctx' -> LintEnv ctx ctx' -> LintEnv ctx (S ctx')
-sinkLintEnv t' (LintEnv s vs ts ts' ss cs rs) = LintEnv (SS s) (mapSink vs) (mapSink ts) (mapSink ts' :> sink t') ss cs (mapSink rs)
+sinkLintEnv t' (LintEnv s vs ts ts' ss cs rs) = LintEnv (SS s) (mapSink vs) (mapSink ts) (mapSink ts' :> sink t') ss cs (sinkRigidMap (mapSink rs))
 
 -- | Empty type checking environemnt.
 emptyLintEnv :: LintEnv EmptyCtx EmptyCtx
@@ -585,29 +585,37 @@ bind' (LintEnv s vs ts ts' ss cs rs) v t = LintEnv s (vs :> v) (ts :> t) ts' (ss
 -- * Type-checking procedures
 -------------------------------------------------------------------------------
 
-type LintM = ExceptT String (State Rigid)
+type LintM = ExceptT String (State Int)
 
--- TODO: index by context?
-newtype Rigid = Rigid Int
+type Rigid :: Ctx -> Type
+newtype Rigid ctx = Rigid Int
   deriving (Eq, Show)
 
-newtype RigidMap v = RigidMap (IntMap v)
+instance Sinkable Rigid where
+    mapLvl _ (Rigid x) = Rigid x
+
+type RigidMap :: Ctx -> Type -> Type
+newtype RigidMap ctx v = RigidMap (IntMap v)
   deriving (Eq, Show, Functor)
 
-lookupRigid :: Rigid -> RigidMap v -> Maybe v
-lookupRigid (Rigid k) (RigidMap m) = IM.lookup k m
+sinkRigidMap :: RigidMap ctx v -> RigidMap (S ctx) v
+sinkRigidMap (RigidMap m) = RigidMap m
 
-insertRigid :: Rigid -> v -> RigidMap v -> RigidMap v
-insertRigid (Rigid k) v (RigidMap m) = RigidMap (IM.insert k v m)
+lookupRigidMap :: Rigid ctx -> RigidMap ctx v -> Maybe v
+lookupRigidMap (Rigid k) (RigidMap m) = IM.lookup k m
 
-newRigid :: LintEnv ctx ctx' -> VTerm ctx' -> LintM (LintEnv ctx ctx', Rigid)
+insertRigidMap :: Rigid ctx -> v -> RigidMap ctx v -> RigidMap ctx v
+insertRigidMap (Rigid k) v (RigidMap m) = RigidMap (IM.insert k v m)
+
+newRigid :: LintEnv ctx ctx' -> VTerm ctx' -> LintM (LintEnv ctx ctx', Rigid ctx')
 newRigid env ty = lift $ do
-    r@(Rigid i) <- get
-    put $! Rigid (i + 1)
-    return (env { rigids = insertRigid r ty env.rigids }, r)
+    i <- get
+    put $! i + 1
+    let r = Rigid i
+    return (env { rigids = insertRigidMap r ty env.rigids }, r)
 
 runLintM :: LintM a -> Either String a
-runLintM m = evalState (runExceptT m) (Rigid 0)
+runLintM m = evalState (runExceptT m) 0
 
 -- | Checking: @Γ ⊢ B ∋ t@.
 check :: LintEnv ctx ctx' -> Term ctx -> VTerm ctx' -> LintM ()
