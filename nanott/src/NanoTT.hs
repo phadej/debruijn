@@ -91,6 +91,9 @@ srunTZ s (sink -> ClosureT env f) = stageTerm (SS s) (env :> evalZ s) f
 srunEZ :: Size ctx -> ClosureE ctx -> SElim (S ctx)
 srunEZ s (sink -> ClosureE env f) = stageElim (SS s) (env :> evalZ s) f
 
+srunE :: Size ctx -> ClosureE ctx -> EvalElim ctx -> SElim ctx
+srunE s (ClosureE env f) e = stageElim s (env :> e) f
+
 valZ :: Size ctx -> VElim (S ctx)
 valZ s = VNeu (lvlZ s) VNil
 
@@ -152,7 +155,7 @@ data SElim ctx where
     SApp :: SElim ctx -> STerm ctx -> VTerm ctx -> SElim ctx
     SSpl :: VElim ctx -> SElim ctx -> SElim ctx
     SAnn :: STerm ctx -> STerm ctx -> VTerm ctx -> SElim ctx
-    SLet :: SElim ctx -> ClosureE ctx -> SElim ctx
+    SLet :: SElim ctx -> VElim ctx -> ClosureE ctx -> SElim ctx
 
 deriving instance Show (VTerm ctx)
 deriving instance Show (VElim ctx)
@@ -199,7 +202,7 @@ instance Sinkable SElim where
     mapLvl f (SRgd u)     = SRgd (mapLvl f u)
     mapLvl f (SVar x)     = SVar (mapLvl f x)
     mapLvl f (SApp g t v) = SApp (mapLvl f g) (mapLvl f t) (mapLvl f v)
-    mapLvl f (SLet a b)   = SLet (mapLvl f a) (mapLvl f b)
+    mapLvl f (SLet a v b) = SLet (mapLvl f a) (mapLvl f v) (mapLvl f b)
     mapLvl f (SAnn t s v) = SAnn (mapLvl f t) (mapLvl f s) (mapLvl f v)
     mapLvl f (SSpl e e')  = SSpl (mapLvl f e) (mapLvl f e')
 
@@ -246,7 +249,7 @@ stageElim :: Size ctx' -> EvalEnv ctx ctx' -> Elim ctx -> SElim ctx'
 stageElim _ env (Var x) = case lookupEnv x env of
     EvalElim _ e -> e
 stageElim s env (App f t)  = SApp (stageElim s env f) (stageTerm s env t) (evalTerm s env t)
-stageElim s env (Let e e') = SLet (stageElim s env e) (ClosureE env e')
+stageElim s env (Let e e') = SLet (stageElim s env e) (evalElim s env e) (ClosureE env e')
 stageElim s env (Ann t a)  = SAnn (stageTerm s env t) (stageTerm s env a) (evalTerm s env a)
 stageElim s env (Spl t)    = SSpl (vspl s $ evalElim s env t) (stageElim s env t)
 
@@ -338,7 +341,7 @@ quoteSElim (NS q) s (SSpl _ e)   = Spl <$> quoteSElim q s e
 quoteSElim NZ     s (SSpl e _)   = quoteElim s e
 quoteSElim q      s (SAnn t a _) = Ann <$> quoteSTerm q s t <*> quoteSTerm q s a
 quoteSElim q      s (SApp f t _) = App <$> quoteSElim q s f <*> quoteSTerm q s t
-quoteSElim q      s (SLet e f)   = Let <$> quoteSElim q s e <*> quoteSElim q (SS s) (srunEZ s f)
+quoteSElim q      s (SLet e _ f) = Let <$> quoteSElim q s e <*> quoteSElim q (SS s) (srunEZ s f)
 
 -------------------------------------------------------------------------------
 -- * Conversion checking
@@ -412,7 +415,7 @@ convTerm' _   (VEqu _ _ _) _               _               = return ()
 --- ⊢ ~ (A : Code [| U |]) ∋ t ≡^0 s
 -- ------------------------------------
 --  ⊢ Code A ∋ [| t |] ≡ [| s |]
-convTerm' ctx (VCod a)     (VQuo _ x)      (VQuo _ y)      = convSTerm ctx (vsplCodArg ctx.size a) x y
+convTerm' ctx (VCod a)     (VQuo _ x)      (VQuo _ y)      = convSTerm NZ ctx (vsplCodArg ctx.size a) x y
 convTerm' ctx (VCod _)     (VEmb x)        (VEmb y)        = convElim ctx x y
 convTerm' _   (VCod _)     x               y               = notConvertible x y
 
@@ -478,78 +481,84 @@ data SpinePart ctx
   deriving Show
 
 -- | Typed conversion: syntactic terms.
-convSTerm :: ConvEnv ctx -> VTerm ctx -> STerm ctx -> STerm ctx -> Either String ()
-convSTerm env ty x y =
+convSTerm :: Natural -> ConvEnv ctx -> VTerm ctx -> STerm ctx -> STerm ctx -> Either String ()
+convSTerm l env ty x y =
     -- traceShow ("CONVS" :: String,env,ty,x,y) $
-    convSTerm' env ty x y
+    convSTerm' l env ty x y
 
 -- | Typed conversion: syntactic terms.
-convSTerm' :: ConvEnv ctx -> VTerm ctx -> STerm ctx -> STerm ctx -> Either String ()
-convSTerm' env _          (SEmb x)       (SEmb y)       = void $ convSElim env x y
-convSTerm' _   VUni       SUni           SUni           = return ()
-convSTerm' _   VUni       SOne           SOne           = return ()
-convSTerm' _   VUni       (SEqu _ _ _)   (SEqu _ _ _)   = error "TODO"
-convSTerm' _   VUni       (SCod _)       (SCod _)       = error "TODO"
-convSTerm' env VUni       (SPie a1 a b1) (SPie a2 _ b2) = do
-    convSTerm env VUni a1 a2
-    convSTerm (convBind a env) VUni (srunTZ env.size b1) (srunTZ env.size b2)
-convSTerm' _   VUni       x              y              = notConvertible x y
+convSTerm' :: Natural -> ConvEnv ctx -> VTerm ctx -> STerm ctx -> STerm ctx -> Either String ()
+convSTerm' l env _          (SEmb x)       (SEmb y)       = void $ convSElim l env x y
+convSTerm' _ _   VUni       SUni           SUni           = return ()
+convSTerm' _ _   VUni       SOne           SOne           = return ()
+convSTerm' _ _   VUni       (SEqu _ _ _)   (SEqu _ _ _)   = error "TODO"
+convSTerm' _ _   VUni       (SCod _)       (SCod _)       = error "TODO"
+convSTerm' l env VUni       (SPie a1 a b1) (SPie a2 _ b2) = do
+    convSTerm l env VUni a1 a2
+    convSTerm l (convBind a env) VUni (srunTZ env.size b1) (srunTZ env.size b2)
+convSTerm' _ _   VUni       x              y              = notConvertible x y
 
-convSTerm' env VOne         x y = error "TODO" env x y
-convSTerm' env (VEqu _ _ _) x y = error "TODO" env x y
+convSTerm' _ env VOne         x y = error "TODO" env x y
+convSTerm' _ env (VEqu _ _ _) x y = error "TODO" env x y
 
-convSTerm' env (VCod a) x y = error "TODO" env a x y
+convSTerm' l env (VCod a) x y = error "TODO" l env a x y
 
-convSTerm' env (VPie a b) (SLam t) (SLam r) = do
-    convSTerm (convBind a env) (runZ env.size b) (srunTZ env.size t) (srunTZ env.size r)
-convSTerm' _   (VPie _ _) x        y        = notConvertible x y
+convSTerm' l env (VPie a b) (SLam t) (SLam r) = do
+    convSTerm l (convBind a env) (runZ env.size b) (srunTZ env.size t) (srunTZ env.size r)
+convSTerm' _ _   (VPie _ _) x        y        = notConvertible x y
 
-convSTerm' _   (VLam _)   x y = notConvertible x y
-convSTerm' _   (VQuo _ _) x y = notConvertible x y
-convSTerm' _   VAst       x y = notConvertible x y
-convSTerm' _   VRfl       x y = notConvertible x y
+convSTerm' _ _   (VLam _)   x y = notConvertible x y
+convSTerm' _ _   (VQuo _ _) x y = notConvertible x y
+convSTerm' _ _   VAst       x y = notConvertible x y
+convSTerm' _ _   VRfl       x y = notConvertible x y
 
-convSTerm' env (VEmb (VAnn t _)) x y = convSTerm' env t x y
-convSTerm' _   (VEmb (VErr err)) _ _ = Left err
-convSTerm' _   (VEmb (VNeu _ _)) x y = error "TODO" x y
+convSTerm' l env (VEmb (VAnn t _)) x y = convSTerm' l env t x y
+convSTerm' _ _   (VEmb (VErr err)) _ _ = Left err
+convSTerm' _ _   (VEmb (VNeu _ _)) x y = error "TODO" x y
 
 -- | Typed conversion: syntactic eliminations.
-convSElim :: ConvEnv ctx -> SElim ctx -> SElim ctx -> Either String (VTerm ctx)
-convSElim env x y =
+convSElim :: Natural -> ConvEnv ctx -> SElim ctx -> SElim ctx -> Either String (VTerm ctx)
+convSElim l env x y =
     -- traceShow ("CONVS" :: String,env,ty,x,y) $
-    convSElim' env x y
+    convSElim' l env x y
 
 -- | Typed conversion: syntactic eliminations.
-convSElim' :: ConvEnv ctx -> SElim ctx -> SElim ctx -> Either String (VTerm ctx)
-convSElim' _   (SErr err) _ = Left err
-convSElim' env (SRgd u) (SRgd v) = do
+convSElim' :: Natural -> ConvEnv ctx -> SElim ctx -> SElim ctx -> Either String (VTerm ctx)
+convSElim' _ _   (SErr err) _ = Left err
+convSElim' _ env (SRgd u) (SRgd v) = do
     unless (u == v) $ notConvertible u v
     case lookupRigidMap u env.rigids of
         Nothing -> Left "unbound rigid"
         Just ty -> return ty
-convSElim' env (SVar x) (SVar y) = do
+convSElim' _  env (SVar x) (SVar y) = do
     unless (x == y) $ notConvertible x y
     return $ lookupEnv (lvlToIdx env.size x) env.types
-convSElim' env (SAnn t a v)  (SAnn s b _) = do
-    convSTerm env VUni a b
-    convSTerm env v    t s
+convSElim' l env (SAnn t a v)  (SAnn s b _) = do
+    convSTerm l env VUni a b
+    convSTerm l env v    t s
     return v
-convSElim' env (SApp f t t') (SApp g s _) = do
-    ty <- convSElim' env f g
+convSElim' l env (SApp f t t') (SApp g s _) = do
+    ty <- convSElim' l env f g
     case ty of
         VPie a b -> do
-            convSTerm env a t s
+            convSTerm l env a t s
             return (run env.size b (EvalElim (vann t' a) (SRgd (error "TODO"))))
         _ -> Left "SApp head is not Pi"
-convSElim' env (SSpl _ _) (SSpl _ _) = error "TODO" env
-convSElim' env (SLet _ _) (SLet _ _) = error "TODO" env
+convSElim' NZ env (SSpl _ _) (SSpl _ _) = error "TODO" env
+convSElim' (NS l) env (SSpl _ _) (SSpl _ _) = error "TODO" l env
+convSElim' l env (SLet e v t) (SLet f _ s) = do
+    ty <- convSElim' l env e f
+    -- needs to generate new rigid.
+    -- u <- newRigid ty
+    let x = EvalElim v (SRgd (error "convSElim' let" ty))
+    convSElim' l env (srunE env.size t x) (srunE env.size s x)
 
-convSElim' _ x@(SRgd _)     y = notConvertible x y
-convSElim' _ x@(SVar _)     y = notConvertible x y
-convSElim' _ x@(SAnn _ _ _) y = notConvertible x y
-convSElim' _ x@(SApp _ _ _) y = notConvertible x y
-convSElim' _ x@(SSpl _ _)   y = notConvertible x y
-convSElim' _ x@(SLet _ _)   y = notConvertible x y
+convSElim' _ _ x@(SRgd _)     y = notConvertible x y
+convSElim' _ _ x@(SVar _)     y = notConvertible x y
+convSElim' _ _ x@(SAnn _ _ _) y = notConvertible x y
+convSElim' _ _ x@(SApp _ _ _) y = notConvertible x y
+convSElim' _ _ x@(SSpl _ _)   y = notConvertible x y
+convSElim' _ _ x@(SLet _ _ _) y = notConvertible x y
 
 -------------------------------------------------------------------------------
 -- * Type-checking context
