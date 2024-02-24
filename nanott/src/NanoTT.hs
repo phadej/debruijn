@@ -355,6 +355,18 @@ data ConvEnv ctx = ConvEnv
     }
   deriving Show
 
+type ConvM = ExceptT String (State Int)
+
+runConvM :: ConvM a -> Int -> Either String a
+runConvM m r = evalState (runExceptT m) r
+
+convNewRigid :: ConvEnv ctx -> VTerm ctx -> ConvM (ConvEnv ctx, Rigid ctx)
+convNewRigid env ty = lift $ do
+    i <- get
+    put $! i + 1
+    let r = Rigid i
+    return (env { rigids = insertRigidMap r ty env.rigids }, r)
+
 -- | Empty conversion environment.
 emptyConvEnv :: ConvEnv EmptyCtx
 emptyConvEnv = ConvEnv SZ EmptyEnv (RigidMap IM.empty)
@@ -363,19 +375,19 @@ emptyConvEnv = ConvEnv SZ EmptyEnv (RigidMap IM.empty)
 convBind :: VTerm ctx -> ConvEnv ctx -> ConvEnv (S ctx)
 convBind t (ConvEnv s ts rs) = ConvEnv (SS s) (mapSink ts :> sink t) (sinkRigidMap (mapSink rs))
 
-notConvertible :: Show a => a -> a -> Either String r
-notConvertible t s = Left $ show (t, s)
+notConvertible :: Show a => a -> a -> ConvM r
+notConvertible t s = throwE $ show (t, s)
 
 -- | Typed conversion check.
 --
 -- @convTerm s Γ x y t@ checks @Γ ⊢ A ∋ x ≡ y@
-convTerm :: ConvEnv ctx -> VTerm ctx -> VTerm ctx -> VTerm ctx -> Either String ()
+convTerm :: ConvEnv ctx -> VTerm ctx -> VTerm ctx -> VTerm ctx -> ConvM ()
 convTerm ctx ty x y  = do
     -- traceM $ "CONV: " ++ show (ctx,ty,x,y)
     convTerm' ctx ty x y
 
 -- | Typed conversion check, terms.
-convTerm' :: ConvEnv ctx -> VTerm ctx -> VTerm ctx -> VTerm ctx -> Either String ()
+convTerm' :: ConvEnv ctx -> VTerm ctx -> VTerm ctx -> VTerm ctx -> ConvM ()
 --
 -- -------------
 --  ⊢ U ∋ U ≡ U
@@ -433,13 +445,13 @@ convTerm' ctx (VPie a b)   (VEmb x)        (VLam y)        = convTerm (convBind 
 convTerm' ctx (VPie _ _)   (VEmb x)        (VEmb y)        = convElim ctx x y
 convTerm' _   (VPie _ _)   x               y               = notConvertible x y
 
-convTerm' _   (VLam _)     _               _               = Left "type Lam"
-convTerm' _   (VQuo _ _)   _               _               = Left "type Quo"
-convTerm' _   VAst         _               _               = Left "type Ast"
-convTerm' _   VRfl         _               _               = Left "type Rfl"
+convTerm' _   (VLam _)     _               _               = throwE "type Lam"
+convTerm' _   (VQuo _ _)   _               _               = throwE "type Quo"
+convTerm' _   VAst         _               _               = throwE "type Ast"
+convTerm' _   VRfl         _               _               = throwE "type Rfl"
 
 convTerm' ctx (VEmb (VAnn t _)) x y = convTerm' ctx t x y
-convTerm' _   (VEmb (VErr err)) _ _ = Left err
+convTerm' _   (VEmb (VErr err)) _ _ = throwE err
 
 -- Only neutral terms can be convertible under neutral type
 convTerm' ctx (VEmb (VNeu _ _)) (VEmb x) (VEmb y) = convElim ctx x y
@@ -450,7 +462,7 @@ etaLam :: Size ctx -> VElim ctx -> VTerm (S ctx)
 etaLam s f = vemb (vapp (SS s) (sink f) (vemb (valZ s)))
 
 -- | Typed conversion check, eliminations.
-convElim :: ConvEnv ctx -> VElim ctx -> VElim ctx -> Either String ()
+convElim :: ConvEnv ctx -> VElim ctx -> VElim ctx -> ConvM ()
 -- annotated terms: drop annotations.
 convElim ctx (VAnn t ty)   e             = convTerm ctx ty t (vemb e)
 convElim ctx e             (VAnn t ty)   = convTerm ctx ty (vemb e) t
@@ -460,19 +472,19 @@ convElim ctx (VNeu h1 sp1) (VNeu h2 sp2) = do
 convElim _   x             y             = notConvertible x y
 
 -- | Typed conversion check: spines.
-convSpine :: forall ctx. ConvEnv ctx -> VTerm ctx -> Spine ctx -> Spine ctx -> Either String ()
+convSpine :: forall ctx. ConvEnv ctx -> VTerm ctx -> Spine ctx -> Spine ctx -> ConvM ()
 convSpine ctx hty = bwd [] where
-    bwd :: [SpinePart ctx] -> Spine ctx -> Spine ctx -> Either String ()
+    bwd :: [SpinePart ctx] -> Spine ctx -> Spine ctx -> ConvM ()
     bwd acc (VApp xs x) (VApp ys y) = bwd (PApp x y : acc) xs ys
     bwd acc (VSpl xs)   (VSpl ys)   = bwd (PSpl : acc) xs ys
     bwd acc VNil        VNil        = fwd hty acc
-    bwd _   _           _           = Left "non-matching spine"
+    bwd _   _           _           = throwE "non-matching spine"
 
-    fwd :: VTerm ctx -> [SpinePart ctx] -> Either String ()
-    fwd _          []              = Right ()
+    fwd :: VTerm ctx -> [SpinePart ctx] -> ConvM ()
+    fwd _          []              = return ()
     fwd (VPie a b) (PApp x y : zs) = convTerm ctx a x y >> fwd (run ctx.size b (EvalElim (vann x a) (SRgd (error "TODO")))) zs
     fwd (VCod a)   (PSpl : zs)     = fwd (vsplCodArg ctx.size a) zs -- Apparently this cannot even happen.
-    fwd _          _               = Left "wrong type spine"
+    fwd _          _               = throwE "wrong type spine"
 
 -- /Verterbrae/
 data SpinePart ctx
@@ -481,13 +493,13 @@ data SpinePart ctx
   deriving Show
 
 -- | Typed conversion: syntactic terms.
-convSTerm :: Natural -> ConvEnv ctx -> VTerm ctx -> STerm ctx -> STerm ctx -> Either String ()
+convSTerm :: Natural -> ConvEnv ctx -> VTerm ctx -> STerm ctx -> STerm ctx -> ConvM ()
 convSTerm l env ty x y =
     -- traceShow ("CONVS" :: String,env,ty,x,y) $
     convSTerm' l env ty x y
 
 -- | Typed conversion: syntactic terms.
-convSTerm' :: Natural -> ConvEnv ctx -> VTerm ctx -> STerm ctx -> STerm ctx -> Either String ()
+convSTerm' :: Natural -> ConvEnv ctx -> VTerm ctx -> STerm ctx -> STerm ctx -> ConvM ()
 convSTerm' l env _          (SEmb x)       (SEmb y)       = void $ convSElim l env x y
 convSTerm' _ _   VUni       SUni           SUni           = return ()
 convSTerm' _ _   VUni       SOne           SOne           = return ()
@@ -498,7 +510,9 @@ convSTerm' l env VUni       (SPie a1 a b1) (SPie a2 _ b2) = do
     convSTerm l (convBind a env) VUni (srunTZ env.size b1) (srunTZ env.size b2)
 convSTerm' _ _   VUni       x              y              = notConvertible x y
 
-convSTerm' _ env VOne         x y = error "TODO" env x y
+convSTerm' _ _   VOne       SAst SAst = return ()
+convSTerm' _ _   VOne       x              y              = notConvertible x y
+
 convSTerm' _ env (VEqu _ _ _) x y = error "TODO" env x y
 
 convSTerm' l env (VCod a) x y = error "TODO" l env a x y
@@ -513,22 +527,22 @@ convSTerm' _ _   VAst       x y = notConvertible x y
 convSTerm' _ _   VRfl       x y = notConvertible x y
 
 convSTerm' l env (VEmb (VAnn t _)) x y = convSTerm' l env t x y
-convSTerm' _ _   (VEmb (VErr err)) _ _ = Left err
+convSTerm' _ _   (VEmb (VErr err)) _ _ = throwE err
 convSTerm' _ _   (VEmb (VNeu _ _)) x y = error "TODO" x y
 
 -- | Typed conversion: syntactic eliminations.
-convSElim :: Natural -> ConvEnv ctx -> SElim ctx -> SElim ctx -> Either String (VTerm ctx)
+convSElim :: Natural -> ConvEnv ctx -> SElim ctx -> SElim ctx -> ConvM (VTerm ctx)
 convSElim l env x y =
     -- traceShow ("CONVS" :: String,env,ty,x,y) $
     convSElim' l env x y
 
 -- | Typed conversion: syntactic eliminations.
-convSElim' :: Natural -> ConvEnv ctx -> SElim ctx -> SElim ctx -> Either String (VTerm ctx)
-convSElim' _ _   (SErr err) _ = Left err
+convSElim' :: Natural -> ConvEnv ctx -> SElim ctx -> SElim ctx -> ConvM (VTerm ctx)
+convSElim' _ _   (SErr err) _ = throwE err
 convSElim' _ env (SRgd u) (SRgd v) = do
     unless (u == v) $ notConvertible u v
     case lookupRigidMap u env.rigids of
-        Nothing -> Left "unbound rigid"
+        Nothing -> throwE "unbound rigid"
         Just ty -> return ty
 convSElim' _  env (SVar x) (SVar y) = do
     unless (x == y) $ notConvertible x y
@@ -543,15 +557,14 @@ convSElim' l env (SApp f t t') (SApp g s _) = do
         VPie a b -> do
             convSTerm l env a t s
             return (run env.size b (EvalElim (vann t' a) (SRgd (error "TODO"))))
-        _ -> Left "SApp head is not Pi"
+        _ -> throwE "SApp head is not Pi"
 convSElim' NZ env (SSpl _ _) (SSpl _ _) = error "TODO" env
 convSElim' (NS l) env (SSpl _ _) (SSpl _ _) = error "TODO" l env
 convSElim' l env (SLet e v t) (SLet f _ s) = do
     ty <- convSElim' l env e f
-    -- needs to generate new rigid.
-    -- u <- newRigid ty
-    let x = EvalElim v (SRgd (error "convSElim' let" ty))
-    convSElim' l env (srunE env.size t x) (srunE env.size s x)
+    (env', u) <- convNewRigid env ty
+    let x = EvalElim v (SRgd u)
+    convSElim' l env' (srunE env.size t x) (srunE env.size s x)
 
 convSElim' _ _ x@(SRgd _)     y = notConvertible x y
 convSElim' _ _ x@(SVar _)     y = notConvertible x y
@@ -681,7 +694,7 @@ check ctx Rfl (VEqu a x y) = do
     -- ------------------- refl
     --  ⊢ Id A t s ∋ refl
     --
-    case convTerm (ConvEnv ctx.size ctx.types' ctx.rigids) a x y of
+    case runConvM (convTerm (ConvEnv ctx.size ctx.types' ctx.rigids) a x y) 100 of
         Right () -> return ()
         Left err -> throwE $ "refl type-mismatch " ++ show (a, x, y) ++ err
 
@@ -730,7 +743,7 @@ check ctx (Emb e)   a = do
     --  ⊢ A ∋ e
     --
     b <- infer ctx e
-    case convTerm (ConvEnv ctx.size ctx.types' ctx.rigids) VUni a b of
+    case runConvM (convTerm (ConvEnv ctx.size ctx.types' ctx.rigids) VUni a b) 100 of
         Right () -> return ()
         Left err -> throwE $ "type-mismatch " ++ show (VUni, a, b) ++ err
 

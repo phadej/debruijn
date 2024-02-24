@@ -27,14 +27,26 @@ main = defaultMain $ testGroup "nanott"
         ]
     , testGroup "conversion"
         [ testCaseSteps "pi" $ \_ -> do
-            assertConvTerm    vcodUni (Quo $ Pie Uni Uni) (Quo $ Pie Uni Uni)
-            assertNotConvTerm vcodUni (Quo $ Pie Uni Uni) (Quo $ Pie Uni One)
+            assertConvTerm    codUni (Quo $ Pie Uni Uni) (Quo $ Pie Uni Uni)
+            assertNotConvTerm codUni (Quo $ Pie Uni Uni) (Quo $ Pie Uni One)
 
         , testCaseSteps "app" $ \_ -> do
             assertConvElim exprId exprId
-            assertConvTerm vcodUni
+            assertConvTerm codUni
                 (Quo $ Emb $ exprId @@ Uni @@ One)
                 (Quo $ Emb $ exprId @@ Uni @@ One)
+
+        , testCaseSteps "let" $ \_ -> do
+            assertConvTerm codUni (Quo $ Emb $ Let (Ann Ast One) (Ann Uni Uni)) (Quo $ Emb $ Let (Ann Ast One) (Ann Uni Uni))
+            assertConvTerm (Cod (Quo One))
+                (Quo $ Emb $ Let (Ann Ast One) var0)
+                (Quo $ Emb $ Let (Ann Ast One) var0)
+            assertConvTerm (Cod (Quo One))
+                (Quo $ Emb $ Let (Ann Ast One) $ Let (Ann Ast One) var0)
+                (Quo $ Emb $ Let (Ann Ast One) $ Let (Ann Ast One) var0)
+            assertNotConvTerm (Cod (Quo One))
+                (Quo $ Emb $ Let (Ann Ast One) $ Let (Ann Ast One) var0)
+                (Quo $ Emb $ Let (Ann Ast One) $ Let (Ann Ast One) var1)
         ]
     ]
 
@@ -60,19 +72,21 @@ testStage name e = testCaseSteps name $ \_info -> do
             -- traceShowM (stageElim SZ EmptyEnv e)
             show e' @?= show e
 
-assertConvTerm :: VTerm EmptyCtx -> Term EmptyCtx -> Term EmptyCtx -> IO ()
+assertConvTerm :: Term EmptyCtx -> Term EmptyCtx -> Term EmptyCtx -> IO ()
 assertConvTerm ty t s = do
+    let ty' = evalTerm SZ EmptyEnv ty
     let t' = evalTerm SZ EmptyEnv t
     let s' = evalTerm SZ EmptyEnv s
-    case convTerm emptyConvEnv ty t' s' of
+    case runConvM (convTerm emptyConvEnv ty' t' s') 0 of
         Right () -> return ()
         Left err -> assertFailure err
 
-assertNotConvTerm :: VTerm EmptyCtx -> Term EmptyCtx -> Term EmptyCtx -> IO ()
+assertNotConvTerm :: Term EmptyCtx -> Term EmptyCtx -> Term EmptyCtx -> IO ()
 assertNotConvTerm ty t s = do
+    let ty' = evalTerm SZ EmptyEnv ty
     let t' = evalTerm SZ EmptyEnv t
     let s' = evalTerm SZ EmptyEnv s
-    case convTerm emptyConvEnv ty t' s' of
+    case runConvM (convTerm emptyConvEnv ty' t' s') 0 of
         Right () -> assertFailure "convertible"
         Left _   -> return ()
 
@@ -80,7 +94,7 @@ assertConvElim :: Elim EmptyCtx -> Elim EmptyCtx -> IO ()
 assertConvElim t s = do
     let t' = evalElim SZ EmptyEnv t
     let s' = evalElim SZ EmptyEnv s
-    case convElim emptyConvEnv t' s' of
+    case runConvM (convElim emptyConvEnv t' s') 0 of
         Right _ -> return ()
         Left err -> assertFailure err
 
@@ -107,6 +121,9 @@ var1 = var' (IS IZ)
 infixl 1 @@
 (@@) :: FromElim t => Elim ctx -> Term ctx -> t ctx
 f @@ t = fromElim (App f t)
+
+codUni :: Term ctx
+codUni = Cod (Quo Uni)
 
 -------------------------------------------------------------------------------
 -- Expressions
