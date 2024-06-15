@@ -15,11 +15,12 @@ module DeBruijn.Ren (
     renameIdxA,
     keepRenA,
     unusedIdx,
-    -- * Renamable things
+    -- * Renameble things
     IdxMapping (..),
     keepAdd,
-    Renamable (..),
-    RenamableA (..),
+    Weaken (..),
+    Rename (..),
+    RenameA (..),
     defaultRename,
     defaultWeaken,
 ) where
@@ -98,7 +99,7 @@ unusedIdx :: Size ctx -> RenA Maybe (S ctx) ctx
 unusedIdx s = MkRenA $ tabulateEnv (SS s) $ unIdx Nothing Just
 
 -------------------------------------------------------------------------------
--- Renamable & RenamableA
+-- Renameble & RenamebleA
 -------------------------------------------------------------------------------
 
 -- | 'IdxMapping' generalizes over various index mappings, also effectful ones.
@@ -145,25 +146,27 @@ instance Applicative f => IdxMapping f (RenA f) where
 renameIdxA :: RenA f ctx ctx' -> Idx ctx -> f (Idx ctx')
 renameIdxA (MkRenA js) i = lookupEnv i js
 
--- | Renamable things.
+-- | Renameble things.
 --
--- For most terms it's enough to define a single traversal: an instance of 'RenamableA' type-class,
--- and then define 'Renamable' as:
+-- For most terms it's enough to define a single traversal: an instance of 'RenamebleA' type-class,
+-- and then define 'Renameble' as:
 --
 -- @
--- instance 'Renamable' Term where 'rename' = 'defaultRename'; 'weaken' = 'defaultWeaken'
+-- instance 'Renameble' Term where 'rename' = 'defaultRename'; 'weaken' = 'defaultWeaken'
 -- @
 --
-class Renamable t where
-    rename :: Ren n m -> t n -> t m
+class Weaken t where
     weaken :: Wk n m -> t n -> t m
 
+class Weaken t => Rename t where
+    rename :: Ren n m -> t n -> t m
+
 -- | 'rename' implementation using 'grename'.
-defaultRename :: forall t n m. RenamableA t => Ren n m -> t n -> t m
+defaultRename :: forall t n m. RenameA t => Ren n m -> t n -> t m
 defaultRename = coerce (grename @t @Ren @Identity @n @m)
 
 -- | 'weaken' implementation using 'grename'.
-defaultWeaken :: forall t n m. RenamableA t => Wk n m -> t n -> t m
+defaultWeaken :: forall t n m. RenameA t => Wk n m -> t n -> t m
 defaultWeaken = coerce (grename @t @Wk @Identity @n @m)
 
 -- | Effectful renamings.
@@ -174,27 +177,33 @@ defaultWeaken = coerce (grename @t @Wk @Identity @n @m)
 -- Just t' <- 'renameA' 'unusedIdx' t
 -- @
 --
-class Renamable t => RenamableA t where
+class Rename t => RenameA t where
     renameA :: forall f ctx ctx'. Applicative f => RenA f ctx ctx' -> t ctx -> f (t ctx')
     renameA = grename
 
     -- | Generic renaming of a term @t@ using any 'IdxMapping'.
     grename :: forall m f ctx ctx'. IdxMapping f m => m ctx ctx' -> t ctx -> f (t ctx')
 
-instance Renamable Proxy where
-    rename _ _ = Proxy
-    weaken _ _ = Proxy
+instance Weaken Proxy where
+     weaken _ _ = Proxy
 
-instance RenamableA Proxy where
+instance Rename Proxy where
+    rename _ _ = Proxy
+
+instance RenameA Proxy where
     grename _ _ = pure Proxy
 
-instance Renamable Idx where
-    rename = renameIdx
+instance Weaken Idx where
     weaken = weakenIdx
 
-instance RenamableA Idx where
+instance Rename Idx where
+    rename = renameIdx
+
+instance RenameA Idx where
     grename = mapIdx
 
-instance Renamable (Ren n) where
-    rename r r' = compRen r' r
+instance Weaken (Ren n) where
     weaken w (MkRen js) = MkRen (fmap (weaken w) js)
+
+instance Rename (Ren n) where
+    rename r r' = compRen r' r
