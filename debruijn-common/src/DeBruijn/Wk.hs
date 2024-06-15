@@ -6,6 +6,7 @@ module DeBruijn.Wk (
     compWk,
     -- * Index weakening
     weakenIdx,
+    contractIdx,
     -- * Size weakening
     weakenSize,
     contractSize,
@@ -133,6 +134,12 @@ compWk1 (SkipWk1 w) (KeepWk1 w') = SkipWk1 (compWk1 w w')
 compWk1 (KeepWk1 w) (KeepWk1 w') = KeepWk1 (compWk1 w w')
 
 -- | Weaken 'Idx', i.e. map index from smaller to larger context.
+--
+-- >>> IS IZ
+-- 1
+--
+-- >>> weakenIdx wk1 (IS IZ)
+-- 2
 weakenIdx :: Wk ctx ctx' -> Idx ctx -> Idx ctx'
 weakenIdx IdWk     x = x
 weakenIdx (NeWk w) x = weaken1Idx w x
@@ -142,6 +149,29 @@ weaken1Idx Wk1         x      = IS x
 weaken1Idx (SkipWk1 w) x      = IS (weaken1Idx w x)
 weaken1Idx (KeepWk1 _) IZ     = IZ
 weaken1Idx (KeepWk1 w) (IS x) = IS (weaken1Idx w x)
+
+-- | Contract 'Idx', i.e. map index from larger to smaller context.
+--
+-- >>> contractIdx wk1 (IS IZ)
+-- Just 0
+--
+-- >>> contractIdx wk1 IZ
+-- Nothing
+--
+-- >>> contractIdx (SkipWk (KeepWk wk1)) <$> [IZ, IS IZ, IS (IS IZ), IS (IS IZ), IS (IS (IS IZ)), IS (IS (IS (IS IZ)))]
+-- [Nothing,Just 0,Nothing,Nothing,Just 1,Just 2]
+--
+contractIdx :: Wk ctx ctx' -> Idx ctx' -> Maybe (Idx ctx)
+contractIdx IdWk     x = Just x
+contractIdx (NeWk w) x = contract1Idx w x
+
+contract1Idx :: Wk1 ctx ctx' -> Idx ctx' -> Maybe (Idx ctx)
+contract1Idx Wk1         IZ     = Nothing
+contract1Idx Wk1         (IS x) = Just x
+contract1Idx (SkipWk1 _) IZ     = Nothing
+contract1Idx (SkipWk1 w) (IS x) = contract1Idx w x
+contract1Idx (KeepWk1 _) IZ     = Just IZ
+contract1Idx (KeepWk1 w) (IS x) = IS <$> contract1Idx w x
 
 -- | Weaken 'Size'.
 weakenSize :: Wk ctx ctx' -> Size ctx -> Size ctx'
