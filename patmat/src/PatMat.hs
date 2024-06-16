@@ -24,7 +24,27 @@ instance Weaken Expr where
     weaken wk (Mch e alts) = Mch (weaken wk e) (map (weaken wk) alts) 
 
 data Bind ctx ctx' where
-    Bind :: Bind ctx (S ctx')
+    Bind :: Bind ctx (S ctx)
+
+class Binder bind where
+    nudge :: Wk n m -> bind n p -> Nudged bind p m
+
+data Nudged bind p m where
+    Nudged :: Wk p q -> bind m q -> Nudged bind p m
+
+instance Binder Bind where
+    nudge wk Bind = Nudged (KeepWk wk) Bind
+
+instance Binder bind => Binder (Path bind) where
+    nudge wk End = Nudged wk End
+    nudge wk (Cons b bs) = case nudge wk b of
+        Nudged wk' b' -> case nudge wk' bs of
+            Nudged wk'' bs' -> Nudged wk'' (Cons b' bs')
+
+instance Binder Pat where
+    nudge wk VarP         = Nudged (KeepWk wk) VarP
+    nudge wk (ConP cn ps) = case nudge wk ps of
+        Nudged wk' ps' -> Nudged wk' (ConP cn ps')
 
 type Alt :: Ctx -> Type
 data Alt ctx where
@@ -58,26 +78,9 @@ type ClauseN :: Ctx -> Type
 data ClauseN ctx where
     ClauseN :: Path Pat ctx ctx' -> Expr ctx' -> ClauseN ctx
 
-data Dodge p m where
-    Dodge :: Pat m q -> Wk p q -> Dodge p m 
-
-data DodgeN p m where
-    DodgeN :: Path Pat m q -> Wk p q -> DodgeN p m 
-
-dodge :: Wk n m -> Pat n p -> Dodge p m
-dodge wk VarP         = Dodge VarP (KeepWk wk)
-dodge wk (ConP cn ps) = case dodgeN wk ps of
-    DodgeN ps' wk' -> Dodge (ConP cn ps') wk'
-
-dodgeN :: Wk n m -> Path Pat n p -> DodgeN p m
-dodgeN wk End         = DodgeN End wk
-dodgeN wk (Cons p ps) = case dodge wk p of
-    Dodge p' wk' -> case dodgeN wk' ps of
-        DodgeN ps' wk'' -> DodgeN (Cons p' ps') wk'' 
-
 instance Weaken ClauseN where
-    weaken wk (ClauseN ps e) = case dodgeN wk ps of
-        DodgeN ps' wk' -> ClauseN ps' (weaken wk' e)
+    weaken wk (ClauseN ps e) = case nudge wk ps of
+        Nudged wk' ps' -> ClauseN ps' (weaken wk' e)
 
 type ClauseN1 :: Ctx -> Type
 data ClauseN1 ctx where
