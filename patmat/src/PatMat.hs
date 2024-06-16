@@ -1,11 +1,13 @@
 {-# LANGUAGE PolyKinds #-}
-module PatMat where
+module PatMat (module PatMat) where
 
 import Data.Kind (Type)
 
 import DeBruijn
 
-singleton :: a -> [a]
+type List a = [a]
+
+singleton :: a -> List a
 singleton x = [x]
 
 type ConName = String
@@ -16,13 +18,22 @@ data Expr ctx where
     Lam :: Expr (S ctx) -> Expr ctx
     Mch :: Expr ctx -> [Alt ctx] -> Expr ctx 
 
+instance Weaken Expr where
+    weaken wk (Var x)      = Var (weaken wk x)
+    weaken wk (Lam t)      = Lam (weaken (KeepWk wk) t)
+    weaken wk (Mch e alts) = Mch (weaken wk e) (map (weaken wk) alts) 
+
 data Bind ctx ctx' where
     Bind :: Bind ctx (S ctx')
 
 type Alt :: Ctx -> Type
 data Alt ctx where
     ConA :: ConName -> Path Bind ctx ctx' -> Expr ctx' -> Alt ctx
-    DefA :: Expr ctx -> Alt ctx
+    VarA :: Expr (S ctx) -> Alt ctx
+
+instance Weaken Alt where
+    weaken wk (VarA e)       = VarA (weaken (KeepWk wk) e)
+    weaken wk (ConA cn bs e) = ConA cn undefined $ error "TODO" cn bs 
 
 type Pat :: Ctx -> Ctx -> Type
 data Pat n m where
@@ -39,22 +50,104 @@ data Path p a b where
     End  :: Path p a a
     Cons :: p a b -> Path p b c -> Path p a c
 
+append :: Path p xs ys -> Path p ys zs -> Path p xs zs
+append End         ys = ys
+append (Cons x xs) ys = Cons x (append xs ys)
+
 type ClauseN :: Ctx -> Type
 data ClauseN ctx where
     ClauseN :: Path Pat ctx ctx' -> Expr ctx' -> ClauseN ctx
 
-elab :: [ClauseN ctx] -> Expr ctx
-elab [] = error "no clauses"
-elab (ClauseN End                       e : _)  = e -- TODO: warning, unreachable clauses
-elab (ClauseN (Cons VarP ps)            e : _)  = Lam $ elab $ singleton $ ClauseN ps e
-elab (ClauseN (Cons (ConP con cps) ps') e : cs) = Lam $ Mch (Var IZ) $
-    [ ConA con undefined undefined
-    | (con, _) <- group ()
-    ]
+data Dodge p m where
+    Dodge :: Pat m q -> Wk p q -> Dodge p m 
 
-type Group :: Ctx -> Type
+data DodgeN p m where
+    DodgeN :: Path Pat m q -> Wk p q -> DodgeN p m 
+
+dodge :: Wk n m -> Pat n p -> Dodge p m
+dodge wk VarP         = Dodge VarP (KeepWk wk)
+dodge wk (ConP cn ps) = case dodgeN wk ps of
+    DodgeN ps' wk' -> Dodge (ConP cn ps') wk'
+
+dodgeN :: Wk n m -> Path Pat n p -> DodgeN p m
+dodgeN wk End         = DodgeN End wk
+dodgeN wk (Cons p ps) = case dodge wk p of
+    Dodge p' wk' -> case dodgeN wk' ps of
+        DodgeN ps' wk'' -> DodgeN (Cons p' ps') wk'' 
+
+instance Weaken ClauseN where
+    weaken wk (ClauseN ps e) = case dodgeN wk ps of
+        DodgeN ps' wk' -> ClauseN ps' (weaken wk' e)
+
+type ClauseN1 :: Ctx -> Type
+data ClauseN1 ctx where
+    ClauseN1 :: Pat ctx ctx' -> Path Pat ctx' ctx'' -> Expr ctx'' -> ClauseN1 ctx
+
+match :: [Idx ctx] -> [ClauseN ctx] -> Expr ctx
+match _      [] = error "no clauses"
+match []     (ClauseN End e : _) = e
+match []     (ClauseN (Cons p ps) e : cs) = error "Intro" p ps e cs
+match (x:xs) (ClauseN (Cons p ps) e : cs) = Mch (Var x) $ alts xs (ClauseN1 p ps e : map expand cs)
+match (_:_)  (ClauseN End _ : _) = error "panic"
+
+expand :: ClauseN ctx -> ClauseN1 ctx
+expand (ClauseN (Cons p ps) e) = ClauseN1 p ps e
+expand (ClauseN End e)         = error "TODO: expand" e
+
+alts :: forall ctx. [Idx ctx] -> [ClauseN1 ctx] -> [Alt ctx]
+alts _  []                       = []
+alts xs (ClauseN1 VarP ps e : _) =
+    singleton $
+    VarA $
+    match (map (weaken wk1) xs) $ singleton $ ClauseN ps e
+alts xs (c@(ClauseN1 (ConP _ _) _ _) : cs) =
+    gs' ++ vg'
+  where
+    (gs, vg) = group (c:cs)
+
+    gs' :: [Alt ctx]
+    gs' = do
+        (cn, sub@(Group ps _ _ : _)) <- gs
+        case helper ps of
+            Aux binds ys wk -> do
+                return $ ConA cn binds $ match
+                    (ys ++ map (weaken wk) xs)
+                    [ weaken wk $ ClauseN (append ps qs) e
+                    | Group ps qs e <- sub
+                    ]
+
+    vg' :: [Alt ctx]
+    vg' = case vg of
+        Nothing -> []
+        Just (VarGroup ps e) -> singleton $
+            VarA $
+            match (map (weaken wk1) xs) $ singleton $ ClauseN ps e
+
+data Aux ctx where
+    Aux :: Path Bind ctx ctx' -> [Idx ctx'] -> Wk ctx ctx' -> Aux ctx
+
+helper :: Path Pat ctx ctx' -> Aux ctx
+helper = undefined
+
 data Group ctx where
-    Group :: ConName -> Path Bind ctx ctx' ->Group ctx
+    Group :: Path Pat ctx ctx' -> Path Pat ctx' ctx'' -> Expr ctx'' -> Group ctx
 
-group :: () -> [(ConName,())]
-group _ = []
+type VarGroup :: Ctx -> Type
+data VarGroup ctx where
+    VarGroup :: Path Pat (S ctx) ctx' -> Expr ctx' -> VarGroup ctx
+
+group :: [ClauseN1 ctx] -> ([(ConName, [Group ctx])], Maybe (VarGroup ctx))
+group [] = ([], Nothing)
+group (ClauseN1 VarP         ps e : _)  = ([], Just (VarGroup ps e))
+group (ClauseN1 (ConP cn ss) ps e : cs) =
+    let (gs, vg) = group cs
+    in (insert cn ss ps e gs, vg)
+
+insert :: ConName -> Path Pat ctx ctx' -> Path Pat ctx' ctx'' -> Expr ctx'' -> [(ConName, [Group ctx])] -> [(ConName, [Group ctx])]
+insert cn ps qs e [] = [(cn, [Group ps qs e])]
+insert cn ps qs e ((cn', gs) : rest)
+    | cn == cn'
+    = (cn', Group ps qs e : gs) : rest
+
+    | otherwise
+    = (cn', gs) : insert cn ps qs e rest
