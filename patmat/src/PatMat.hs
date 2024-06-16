@@ -12,7 +12,17 @@ type ConName = String
 
 type Expr :: ctx -> Type
 data Expr ctx where
+    Var :: Idx ctx -> Expr ctx
     Lam :: Expr (S ctx) -> Expr ctx
+    Mch :: Expr ctx -> [Alt ctx] -> Expr ctx 
+
+data Bind ctx ctx' where
+    Bind :: Bind ctx (S ctx')
+
+type Alt :: Ctx -> Type
+data Alt ctx where
+    ConA :: ConName -> Path Bind ctx ctx' -> Expr ctx' -> Alt ctx
+    DefA :: Expr ctx -> Alt ctx
 
 type Pat :: Ctx -> Ctx -> Type
 data Pat n m where
@@ -26,7 +36,7 @@ data Clause ctx where
 -- | Transitive-reflexive closure.
 type Path :: (k -> k -> Type) -> k -> k -> Type
 data Path p a b where
-    End :: Path p a a
+    End  :: Path p a a
     Cons :: p a b -> Path p b c -> Path p a c
 
 type ClauseN :: Ctx -> Type
@@ -37,4 +47,14 @@ elab :: [ClauseN ctx] -> Expr ctx
 elab [] = error "no clauses"
 elab (ClauseN End                       e : _)  = e -- TODO: warning, unreachable clauses
 elab (ClauseN (Cons VarP ps)            e : _)  = Lam $ elab $ singleton $ ClauseN ps e
-elab (ClauseN (Cons (ConP con cps) ps') e : cs) = _
+elab (ClauseN (Cons (ConP con cps) ps') e : cs) = Lam $ Mch (Var IZ) $
+    [ ConA con undefined undefined
+    | (con, _) <- group ()
+    ]
+
+type Group :: Ctx -> Type
+data Group ctx where
+    Group :: ConName -> Path Bind ctx ctx' ->Group ctx
+
+group :: () -> [(ConName,())]
+group _ = []
