@@ -5,6 +5,7 @@ import Data.Kind (Type)
 import DeBruijn
 import Path
 import Binder
+import Name
 
 type List a = [a]
 
@@ -13,6 +14,10 @@ singleton x = [x]
 
 type ConName = String
 
+type Constructor :: Ctx -> Type
+data Constructor arity where
+    Constructor :: String -> !(Size arity) -> Constructor arity
+
 type Expr :: Ctx -> Type
 data Expr ctx where
     Var :: Idx ctx -> Expr ctx
@@ -20,14 +25,11 @@ data Expr ctx where
     Mch :: Expr ctx -> [Alt ctx] -> Expr ctx 
 
 instance Weaken Expr where
-    weaken wk (Var x)      = Var (weaken wk x)
-    weaken wk (Lam t)      = Lam (weaken (KeepWk wk) t)
-    weaken wk (Mch e alts) = Mch (weaken wk e) (map (weaken wk) alts) 
+    weaken wk (Var x)    = Var (weaken wk x)
+    weaken wk (Lam t)    = Lam (weaken (KeepWk wk) t)
+    weaken wk (Mch e ts) = Mch (weaken wk e) (map (weaken wk) ts) 
 
-instance Binder Pat where
-    nudge wk VarP         = Nudged (KeepWk wk) VarP
-    nudge wk (ConP cn ps) = case nudge wk ps of
-        Nudged wk' ps' -> Nudged wk' (ConP cn ps')
+
 
 type Alt :: Ctx -> Type
 data Alt ctx where
@@ -36,12 +38,18 @@ data Alt ctx where
 
 instance Weaken Alt where
     weaken wk (VarA e)       = VarA (weaken (KeepWk wk) e)
-    weaken wk (ConA cn bs e) = ConA cn undefined $ error "TODO" cn bs 
+    weaken wk (ConA cn bs e) = case nudge wk bs of
+        Nudged wk' bs' -> ConA cn bs' (weaken wk' e)
 
 type Pat :: Ctx -> Ctx -> Type
 data Pat n m where
     VarP :: Pat ctx (S ctx)
     ConP :: ConName -> Path Pat ctx ctx' -> Pat ctx ctx' 
+
+instance Binder Pat where
+    nudge wk VarP         = Nudged (KeepWk wk) VarP
+    nudge wk (ConP cn ps) = case nudge wk ps of
+        Nudged wk' ps' -> Nudged wk' (ConP cn ps')
 
 type Clause :: Ctx -> Type
 data Clause ctx where
@@ -88,8 +96,8 @@ alts xs (c@(ClauseN1 (ConP _ _) _ _) : cs) =
             Aux binds ys wk -> do
                 return $ ConA cn binds $ match
                     (ys ++ map (weaken wk) xs)
-                    [ weaken wk $ ClauseN (append ps qs) e
-                    | Group ps qs e <- sub
+                    [ weaken wk $ ClauseN (append ps' qs) e
+                    | Group ps' qs e <- sub
                     ]
 
     vg' :: [Alt ctx]
@@ -102,8 +110,17 @@ alts xs (c@(ClauseN1 (ConP _ _) _ _) : cs) =
 data Aux ctx where
     Aux :: Path Bind ctx ctx' -> [Idx ctx'] -> Wk ctx ctx' -> Aux ctx
 
-helper :: Path Pat ctx ctx' -> Aux ctx
-helper = undefined
+helper :: Path Pat ctxA ctxB -> Aux ctx
+helper End                = Aux End [] IdWk
+helper (Cons p ps) = case helper ps of
+    Aux ps' xs wk -> Aux (Cons (Bind (mkName p)) (helper2 ps')) (IZ : map (weaken wk1) xs) (SkipWk wk)
+
+mkName :: Pat ctx ctx' -> Name
+mkName _ = Name "ds"
+
+helper2 :: Path Bind ctx ctx' -> Path Bind (S ctx) (S ctx')
+helper2 End                = End
+helper2 (Cons (Bind n) ps) = Cons (Bind n) (helper2 ps)
 
 data Group ctx where
     Group :: Path Pat ctx ctx' -> Path Pat ctx' ctx'' -> Expr ctx'' -> Group ctx
