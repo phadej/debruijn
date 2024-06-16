@@ -4,9 +4,9 @@ version:       0.1
 license:       BSD-3-Clause
 license-file:  LICENSE
 category:      Development
-synopsis:      Nano Type Theory
+synopsis:      Pattern matching elaboration
 description:
-  A type theory implementation used as a demo project for @debruijn@ package.
+  An example of elaborating nested pattern matching
 
 author:        Oleg Grenrus <oleg.grenrus@iki.fi>
 maintainer:    Oleg Grenrus <oleg.grenrus@iki.fi>
@@ -77,5 +77,8 @@ library
   else
     build-depends: debruijn
 
+  exposed-modules: PatMat
   exposed-modules:
-    PatMat
+    Binder
+    Path
+    Name

@@ -1,9 +1,10 @@
-{-# LANGUAGE PolyKinds #-}
 module PatMat (module PatMat) where
 
 import Data.Kind (Type)
 
 import DeBruijn
+import Path
+import Binder
 
 type List a = [a]
 
@@ -12,7 +13,7 @@ singleton x = [x]
 
 type ConName = String
 
-type Expr :: ctx -> Type
+type Expr :: Ctx -> Type
 data Expr ctx where
     Var :: Idx ctx -> Expr ctx
     Lam :: Expr (S ctx) -> Expr ctx
@@ -22,24 +23,6 @@ instance Weaken Expr where
     weaken wk (Var x)      = Var (weaken wk x)
     weaken wk (Lam t)      = Lam (weaken (KeepWk wk) t)
     weaken wk (Mch e alts) = Mch (weaken wk e) (map (weaken wk) alts) 
-
-data Bind ctx ctx' where
-    Bind :: Bind ctx (S ctx)
-
-class Binder bind where
-    nudge :: Wk n m -> bind n p -> Nudged bind p m
-
-data Nudged bind p m where
-    Nudged :: Wk p q -> bind m q -> Nudged bind p m
-
-instance Binder Bind where
-    nudge wk Bind = Nudged (KeepWk wk) Bind
-
-instance Binder bind => Binder (Path bind) where
-    nudge wk End = Nudged wk End
-    nudge wk (Cons b bs) = case nudge wk b of
-        Nudged wk' b' -> case nudge wk' bs of
-            Nudged wk'' bs' -> Nudged wk'' (Cons b' bs')
 
 instance Binder Pat where
     nudge wk VarP         = Nudged (KeepWk wk) VarP
@@ -63,16 +46,6 @@ data Pat n m where
 type Clause :: Ctx -> Type
 data Clause ctx where
     Clause :: Pat ctx ctx' -> Expr ctx' -> Clause ctx
-
--- | Transitive-reflexive closure.
-type Path :: (k -> k -> Type) -> k -> k -> Type
-data Path p a b where
-    End  :: Path p a a
-    Cons :: p a b -> Path p b c -> Path p a c
-
-append :: Path p xs ys -> Path p ys zs -> Path p xs zs
-append End         ys = ys
-append (Cons x xs) ys = Cons x (append xs ys)
 
 type ClauseN :: Ctx -> Type
 data ClauseN ctx where
