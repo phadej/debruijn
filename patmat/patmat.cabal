@@ -5,9 +5,7 @@ license:       BSD-3-Clause
 license-file:  LICENSE
 category:      Development
 synopsis:      Pattern matching elaboration
-description:
-  An example of elaborating nested pattern matching
-
+description:   An example of elaborating nested pattern matching
 author:        Oleg Grenrus <oleg.grenrus@iki.fi>
 maintainer:    Oleg Grenrus <oleg.grenrus@iki.fi>
 build-type:    Simple
@@ -77,8 +75,15 @@ library
   else
     build-depends: debruijn
 
+  -- other dependencies
+  build-depends:   some ^>=1.0.6, fin
+
+  -- Main module, loaded into ghci
   exposed-modules: PatMat
+
+  -- other modules
   exposed-modules:
     Binder
-    Path
+    Constructor
     Name
+    Path
