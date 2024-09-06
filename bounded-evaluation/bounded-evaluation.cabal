@@ -1,0 +1,100 @@
+cabal-version: 2.4
+name:          bounded-evaluation
+version:       0.1
+license:       BSD-3-Clause
+license-file:  LICENSE
+category:      Development
+synopsis:      Nano Type Theory
+description:   An example of bounded evaluation using @debruijn@ package
+author:        Oleg Grenrus <oleg.grenrus@iki.fi>
+maintainer:    Oleg Grenrus <oleg.grenrus@iki.fi>
+build-type:    Simple
+tested-with:   GHC ==9.2.8 || ==9.4.8 || ==9.6.5 || ==9.8.2 || ==9.10.1
+
+source-repository head
+  type:     git
+  location: https://github.com/phadej/debruijn.git
+  subdir:   bounded-evaluation
+
+common common
+  default-language:   Haskell2010
+  ghc-options:
+    -Wall -Wno-unticked-promoted-constructors -Wno-ambiguous-fields
+    -Wmissing-export-lists
+
+  default-extensions:
+    BangPatterns
+    DataKinds
+    DeriveGeneric
+    DeriveTraversable
+    DerivingStrategies
+    DuplicateRecordFields
+    EmptyCase
+    ExplicitNamespaces
+    FlexibleContexts
+    FlexibleInstances
+    FunctionalDependencies
+    GADTs
+    GeneralizedNewtypeDeriving
+    KindSignatures
+    MultiWayIf
+    NoFieldSelectors
+    NumericUnderscores
+    OverloadedLabels
+    OverloadedRecordDot
+    OverloadedStrings
+    PatternSynonyms
+    QuantifiedConstraints
+    RankNTypes
+    RecordWildCards
+    RoleAnnotations
+    ScopedTypeVariables
+    StandaloneDeriving
+    StandaloneKindSignatures
+    TypeApplications
+    TypeOperators
+    ViewPatterns
+
+library
+  import:          common
+  hs-source-dirs:  src
+
+  -- GHC-boot libraries
+  build-depends:
+    , base          ^>=4.16.3.0 || ^>=4.17.0.0 || ^>=4.18.0.0 || ^>=4.19.0.0 || ^>=4.20.0.0
+    , pretty        ^>=1.1.3.6
+    , transformers  ^>=0.5.6.2  || ^>=0.6.1.0
+
+  -- we use debruijn to keep variables in scope
+  build-depends:   debruijn
+
+  -- extra dependencies
+  build-depends:
+    , fin                   ^>=0.3.1
+    , hashable
+    , unordered-containers
+
+  exposed-modules:
+    BoundedEvaluation
+    BoundedEvaluation.Base
+    BoundedEvaluation.Haskell
+    BoundedEvaluation.Pretty
+    BoundedEvaluation.Term
+    BoundedEvaluation.Traditional
+
+test-suite nanott-tests
+  import:         common
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: tests
+  main-is:        nanott-tests.hs
+
+  -- library dependencies
+  build-depends:
+    , base
+    , nanott
+    , transformers
+
+  -- test dependencies
+  build-depends:
+    , tasty        ^>=1.5
+    , tasty-hunit  ^>=0.10.1
