@@ -3,6 +3,7 @@ packages: debruijn-safe
 
 -- demo package
 packages: nanott/
+packages: bounded-evaluation
 
 tests: True
 
