@@ -45,7 +45,7 @@ emptySub = MkSub EmptyEnv
 snocSub :: Sub t ctx ctx' -> t ctx' -> Sub t (S ctx) ctx'
 snocSub (MkSub s) t = MkSub (s :> t)
 
-keepSub :: (Rename t, Var t) => Sub t ctx ctx' -> Sub t (S ctx) (S ctx')
+keepSub :: (Weaken t, Var t) => Sub t ctx ctx' -> Sub t (S ctx) (S ctx')
 keepSub (MkSub ts) = MkSub (fmap (weaken wk1) ts :> var IZ)
 
 -- | Precompose 'Sub' with weakening.
@@ -53,7 +53,7 @@ weakenSub :: Wk ctx ctx' -> Sub t ctx' ctx'' -> Sub t ctx ctx''
 weakenSub w (MkSub ts) = MkSub (weakenEnv w ts)
 
 -- TODO:
-nameMe :: Rename t => Sub t ctx ctx' -> Wk ctx' ctx'' -> Sub t ctx ctx''
+nameMe :: Weaken t => Sub t ctx ctx' -> Wk ctx' ctx'' -> Sub t ctx ctx''
 nameMe (MkSub ts) w = MkSub (fmap (weaken w) ts)
 
 -------------------------------------------------------------------------------

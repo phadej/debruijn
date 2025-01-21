@@ -1,20 +1,21 @@
-cabal-version: 2.4
-name:          debruijn
-version:       0.2
-license:       BSD-3-Clause
-license-file:  LICENSE
-category:      Development
-synopsis:      de Bruijn indices and levels
+cabal-version:   2.4
+name:            debruijn
+version:         0.2.1
+license:         BSD-3-Clause
+license-file:    LICENSE
+category:        Development
+synopsis:        de Bruijn indices and levels
 description:
   de Bruijn indices and levels for well-scoped terms.
   .
   This is "unsafe" (as it uses 'unsafeCoerce') implementation, but it's fast.
   The API is the same as in @debruin-safe@ package.
 
-author:        Oleg Grenrus <oleg.grenrus@iki.fi>
-maintainer:    Oleg Grenrus <oleg.grenrus@iki.fi>
-build-type:    Simple
-tested-with:   GHC ==9.2.8 || ==9.4.8 || ==9.6.5 || ==9.8.2 || ==9.10.1
+author:          Oleg Grenrus <oleg.grenrus@iki.fi>
+maintainer:      Oleg Grenrus <oleg.grenrus@iki.fi>
+build-type:      Simple
+tested-with:     GHC ==9.2.8 || ==9.4.8 || ==9.6.5 || ==9.8.2 || ==9.10.1
+extra-doc-files: CHANGELOG.md
 
 source-repository head
   type:     git
