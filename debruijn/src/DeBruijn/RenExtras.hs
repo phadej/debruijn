@@ -12,5 +12,5 @@ import Unsafe.Coerce (unsafeCoerce)
 -- | Weaken closed term to arbitrary context.
 --
 -- Note: this has different requirements than 'sinkSize'.
-weakenUsingSize :: Rename t => Size ctx -> t EmptyCtx -> t ctx
+weakenUsingSize :: Weaken t => Size ctx -> t EmptyCtx -> t ctx
 weakenUsingSize _ = unsafeCoerce
