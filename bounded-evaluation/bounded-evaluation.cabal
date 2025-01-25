@@ -82,16 +82,16 @@ library
     BoundedEvaluation.Term
     BoundedEvaluation.Traditional
 
-test-suite nanott-tests
+test-suite bounded-evaluation-tests
   import:         common
   type:           exitcode-stdio-1.0
   hs-source-dirs: tests
-  main-is:        nanott-tests.hs
+  main-is:        bounded-evaluation-tests.hs
 
   -- library dependencies
   build-depends:
     , base
-    , nanott
+    , bounded-evaluation
     , transformers
 
   -- test dependencies
