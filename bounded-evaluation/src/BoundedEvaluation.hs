@@ -54,17 +54,17 @@ type EvalEnv ctx ctx' = Env ctx (Ref ctx')
 emptyEvalEnv :: EvalEnv EmptyCtx EmptyCtx
 emptyEvalEnv = EmptyEnv
 
-data Ref ctx = Ref !Int !(IORef (HeapObject ctx))
+data Ref ctx = Ref !Bool !Int !(IORef (HeapObject ctx))
   deriving Eq
     
 instance Hashable (Ref ctx) where
-    hash (Ref i _) = i
-    hashWithSalt s (Ref i _) = hashWithSalt s i
+    hash (Ref _ i _) = i
+    hashWithSalt s (Ref _ i _) = hashWithSalt s i
 
 instance Sinkable Ref where mapLvl = error "needs unsafe sink"
 
 instance Show (Ref ctx) where
-    showsPrec d (Ref n _) = showParen (d > 10) $ showString "Ref " . showsPrec 11 n
+    showsPrec d (Ref r n _) = showParen (d > 10) $ showString "Ref " . showsPrec 11 r . showChar ' ' . showsPrec 11 n
 
 -- | Heap objects.
 data HeapObject ctx
@@ -98,7 +98,8 @@ deriving instance Show (Closure ctx)
 deriving instance Show (Closure1 ctx)
 
 force :: Stats -> Ref ctx -> IO (Value ctx)
-force q (Ref _ ref) = do
+force q reee@(Ref r _ ref) = do
+    when r $ putStrLn $ "forcing recursive ref " ++ show reee
     n <- atomicModifyIORef' q.forces (\n -> (n + 1, n))
     when (n >= 1_000) $ fail "maximum force"
     o <- readIORef ref
@@ -106,24 +107,26 @@ force q (Ref _ ref) = do
         HBlackHole             -> fail "forcing blackhole"
         HValue v               -> return v
         HThunk (Closure env t) -> do
+            putStrLn $ "force HThunk: " ++ show t
             writeIORef ref HBlackHole
             v <- eval q env t
             writeIORef ref (HValue v)
             return v
 
-allocHeapObject :: Stats -> HeapObject ctx -> IO (Ref ctx)
-allocHeapObject q h = do
+-- TOOD: Bool -> data Recursive = Recursive | NonRecursive
+allocHeapObject :: Bool -> Stats -> HeapObject ctx -> IO (Ref ctx)
+allocHeapObject r q h = do
     n <- atomicModifyIORef' q.allocs (\n -> (n + 1, n))
-    Ref n <$> newIORef h
+    Ref r n <$> newIORef h
 
 refZer :: Ref ctx
-refZer = unsafePerformIO $ Ref (-1) <$> newIORef (HValue VZer)
+refZer = unsafePerformIO $ Ref False (-1) <$> newIORef (HValue VZer)
 {-# NOINLINE refZer #-}
 
-makeRef :: Stats -> EvalEnv ctx ctx' -> Term ctx -> IO (Ref ctx')
-makeRef _ _   Zer     = return refZer
-makeRef q env (Lam t) = allocHeapObject q (HValue (VLam (Closure1 env t)))
-makeRef q env t       = allocHeapObject q (HThunk (Closure env t))
+makeRef :: Bool -> Stats -> EvalEnv ctx ctx' -> Term ctx -> IO (Ref ctx')
+makeRef _ _ _   Zer     = return refZer
+makeRef r q env (Lam t) = allocHeapObject r q (HValue (VLam (Closure1 env t)))
+makeRef r q env t       = allocHeapObject r q (HThunk (Closure env t))
 
 ev :: EvalEnv ctx ctx' -> Term ctx -> IO (Value ctx')
 ev env t = do
@@ -157,23 +160,23 @@ eval' q env (Var x) = do
 eval' _ env (Lam t) = do
     return (VLam (Closure1 env t))
 eval' q env (App f t) = do
-    t' <- makeRef q env t
+    t' <- makeRef False q env t
     f' <- eval q env f
     vApp q f' t'
 eval' _ _   Zer = do
     return VZer
 eval' q env (Suc t) = do
-    t' <- makeRef q env t
+    t' <- makeRef False q env t
     return (VSuc t')
 eval' q env (Let t s) = do
-    t' <- makeRef q env t
+    t' <- makeRef False q env t
     eval q (env :> t') s
 eval' q env (Fix t) = mdo
-    t' <- makeRef q (env :> t') t
+    t' <- makeRef True q (env :> t') t
     force q t'
 eval' q env (Mch t n s) = do
     t' <- eval q env t
-    n' <- makeRef q env n
+    n' <- makeRef False q env n
     s' <- return (Closure1 env s)
     vMch q t' n' s'
 
@@ -194,7 +197,7 @@ evalClosure1 q (Closure1 env t) ref = eval q (env :> ref) t
 
 stuckClosure1 :: Stats -> Size ctx -> Closure1 ctx -> IO (Value (S ctx))
 stuckClosure1 q s (Closure1 env t) = do
-    x <- allocHeapObject q (HValue (VNeu (lvlZ s) VNil))
+    x <- allocHeapObject False q (HValue (VNeu (lvlZ s) VNil))
     eval q (mapSink env :> x) t
 
 -------------------------------------------------------------------------------
@@ -262,7 +265,8 @@ conv' _ _ _ (VNeu _ _) _         =
     return False
 
 convRef :: Stats -> Visited -> Size ctx -> Ref ctx -> Ref ctx -> IO Bool
-convRef q v s t1@(Ref i1 _) t2@(Ref i2 _) = do
+convRef q v s t1@(Ref r1 i1 _) t2@(Ref r2 i2 _) = do
+    print $ "convRef " ++ show (t1, t2)
     let k = (i1, i2)
     hs <- readIORef v
     if HS.member k hs
@@ -270,6 +274,7 @@ convRef q v s t1@(Ref i1 _) t2@(Ref i2 _) = do
         return True
     else do
         writeIORef v (HS.insert k hs)
+        print (t1, t2)
         v1 <- force q t1
         v2 <- force q t2
         conv' q v s v1 v2
