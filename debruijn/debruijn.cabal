@@ -1,6 +1,6 @@
 cabal-version:   2.4
 name:            debruijn
-version:         0.3
+version:         0.2.1
 license:         BSD-3-Clause
 license-file:    LICENSE
 category:        Development
