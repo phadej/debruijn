@@ -1,3 +1,5 @@
-# 0.2.1
+# 0.3
 
-`keepSub` only requires `Weaken`, not `Rename`.
+- Remove RenameA machinery
+- Introduce `Contract` for environment contraction (reverse of weakening)
+- `keepSub` only requires `Weaken`, not `Rename`.
