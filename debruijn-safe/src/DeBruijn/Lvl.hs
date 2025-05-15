@@ -3,13 +3,14 @@ module DeBruijn.Lvl (
     Lvl,
     lvlToIdx,
     lvlZ,
-    sinkLvl,
+    idxToLvl,
+    -- * Sinking
     Sinkable (..),
     sink,
-    mapSink,
     sinkSize,
-    mapSinkSize,
     sinkAdd,
+    mapSink,
+    mapSinkSize,
     mapSinkAdd,
 ) where
 
@@ -58,6 +59,13 @@ instance Show (Lvl ctx) where
 lvlToIdx :: Size ctx -> Lvl ctx -> Idx ctx
 lvlToIdx _ (MkLvl _ x) = x
 
+-- | Convert index to level.
+--
+-- >>> idxToLvl S2 (IS IZ)
+--
+idxToLvl :: Size ctx -> Idx ctx -> Lvl ctx
+idxToLvl s x = (MkLvl (sizeToInt s - idxToInt x) x)
+
 -- | Last level.
 --
 -- >>> lvlZ S1
@@ -69,6 +77,7 @@ lvlToIdx _ (MkLvl _ x) = x
 lvlZ :: Size ctx -> Lvl (S ctx)
 lvlZ s = MkLvl (sizeToInt s) IZ
 
+{- TODO?
 -- | Sink 'Lvl' into a larger context.
 --
 -- >>> sinkLvl (lvlZ S3)
@@ -83,6 +92,7 @@ lvlZ s = MkLvl (sizeToInt s) IZ
 --
 sinkLvl :: Lvl ctx -> Lvl (S ctx)
 sinkLvl (MkLvl s i) = MkLvl s (IS i)
+-}
 
 -------------------------------------------------------------------------------
 -- Sinkable
