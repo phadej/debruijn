@@ -1,3 +1,7 @@
+# 0.3.1
+
+- No functional changes: release to keep version of `debruijn` and `debruijn-safe` in sync.
+
 # 0.3
 
 - Remove RenameA machinery
