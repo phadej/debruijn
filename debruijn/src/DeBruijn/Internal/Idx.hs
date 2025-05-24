@@ -35,7 +35,7 @@ import Unsafe.Coerce (unsafeCoerce)
 type Idx :: Ctx -> Type
 type role Idx nominal
 
-newtype Idx j = UnsafeIdx { _idxToInt :: Int }
+newtype Idx ctx = UnsafeIdx { _idxToInt :: Int }
 
 -------------------------------------------------------------------------------
 -- Combinators

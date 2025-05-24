@@ -33,16 +33,16 @@ import DeBruijn.Ctx
 type Idx :: Ctx -> Type
 type role Idx nominal
 
-data Idx n where
-    IZ :: Idx (S n)
-    IS :: !(Idx n) -> Idx (S n)
+data Idx ctx where
+    IZ :: Idx (S ctx)
+    IS :: !(Idx ctx) -> Idx (S ctx)
 
 -------------------------------------------------------------------------------
 -- Combinators
 -------------------------------------------------------------------------------
 
 -- | Convert index to 'Int'.
-idxToInt :: Idx n -> Int
+idxToInt :: Idx ctx -> Int
 idxToInt = go 0 where
     go :: Int -> Idx j -> Int
     go !acc IZ = acc
@@ -58,8 +58,8 @@ absurdIdx x = x `seq` error "absurd: Idx Z"
 -- Instances
 -------------------------------------------------------------------------------
 
-deriving instance Eq (Idx n)
-deriving instance Ord (Idx n)
+deriving instance Eq (Idx ctx)
+deriving instance Ord (Idx ctx)
 
 instance Show (Idx j) where
     showsPrec d = showsPrec d . idxToInt
