@@ -62,6 +62,7 @@ lvlToIdx _ (MkLvl _ x) = x
 -- | Convert index to level.
 --
 -- >>> idxToLvl S2 (IS IZ)
+-- 1
 --
 idxToLvl :: Size ctx -> Idx ctx -> Lvl ctx
 idxToLvl s x = (MkLvl (sizeToInt s - idxToInt x) x)
