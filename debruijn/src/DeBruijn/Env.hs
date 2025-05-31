@@ -4,6 +4,7 @@ module DeBruijn.Env (
     lookupEnv,
     sizeEnv,
     tabulateEnv,
+    zipWithEnv,
 ) where
 
 import DeBruijn.Internal.Env

@@ -1,6 +1,6 @@
 # 0.3.1
 
-- No functional changes: release to keep version of `debruijn` and `debruijn-safe` in sync.
+- Add `zipWithEnv :: (a -> b -> c) -> Env ctx a -> Env ctx b -> Env ctx c`
 
 # 0.3
 

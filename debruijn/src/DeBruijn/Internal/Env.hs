@@ -4,6 +4,7 @@ module DeBruijn.Internal.Env (
     lookupEnv,
     sizeEnv,
     tabulateEnv,
+    zipWithEnv,
 ) where
 
 import Data.Coerce          (coerce)
@@ -123,3 +124,23 @@ sizeEnv (UnsafeEnv xs) = UnsafeSize (length xs)
 --
 tabulateEnv :: Size ctx -> (Idx ctx -> a) -> Env ctx a
 tabulateEnv (UnsafeSize s) f = UnsafeEnv $ SL.fromList $ map (coerce f) [0 .. s - 1]
+
+-- |
+--
+-- >>> zipWithEnv (,) (EmptyEnv :> 'a') (EmptyEnv :> True)
+-- EmptyEnv :> ('a',True)
+--
+-- @since 0.3.1
+zipWithEnv :: (a -> b -> c) -> Env ctx a -> Env ctx b -> Env ctx c
+zipWithEnv f (UnsafeEnv xs) (UnsafeEnv ys) = UnsafeEnv (skewListZipWith f xs ys)
+
+-- Possible TODO: we could be more efficient, keeping the structure of first
+-- list and only unconsing the other one.
+-- Probably doesn't matter efficiency-wise.
+skewListZipWith :: (a -> b -> c) -> SkewList a -> SkewList b -> SkewList c
+skewListZipWith f = go where 
+    go xs ys = case SL.uncons xs of
+        Nothing -> SL.empty
+        Just (x, xs') -> case SL.uncons ys of
+            Nothing -> SL.empty
+            Just (y, ys') -> SL.cons (f x y) (go xs' ys')

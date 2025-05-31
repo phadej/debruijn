@@ -4,6 +4,7 @@ module DeBruijn.Env (
     lookupEnv,
     sizeEnv,
     tabulateEnv,
+    zipWithEnv,
 ) where
 
 import Data.Kind (Type)
@@ -72,7 +73,7 @@ instance Show a => Show (Env ctx a) where
 -- 'b'
 --
 lookupEnv :: Idx ctx -> Env ctx a -> a
-lookupEnv IZ     (_  :> x)  = x
+lookupEnv IZ     (_  :> x) = x
 lookupEnv (IS n) (xs :> _) = lookupEnv n xs
 
 -- | Size of the environment.
@@ -87,3 +88,13 @@ sizeEnv (xs :> _) = SS (sizeEnv xs)
 tabulateEnv :: Size ctx -> (Idx ctx -> a) -> Env ctx a
 tabulateEnv SZ     _ = EmptyEnv
 tabulateEnv (SS s) f = tabulateEnv s (f . IS) :> f IZ
+
+-- |
+--
+-- >>> zipWithEnv (,) (EmptyEnv :> 'a') (EmptyEnv :> True)
+-- EmptyEnv :> ('a',True)
+--
+-- @since 0.3.1
+zipWithEnv :: (a -> b -> c) -> Env ctx a -> Env ctx b -> Env ctx c
+zipWithEnv _ EmptyEnv  EmptyEnv  = EmptyEnv
+zipWithEnv f (xs :> x) (ys :> y) = zipWithEnv f xs ys :> f x y
